@@ -6,6 +6,7 @@
 
 #include "game/anim.h"
 #include "game/blit.h"
+#include "game/evlog.h"
 #include "game/fixes.h"
 #include "game/gfx.h"
 #include "game/le.h"
@@ -241,6 +242,7 @@ void SpWar_InitSpaceFleets(void)
     PlanetInfo_SelectCurBody();
     ds.SpWar_AttackerStart = ds.SpWar_AttackerShipCount;
     ds.SpWar_DefenderStart = ds.SpWar_DefenderShipCount;
+    EvLog_SpaceBattleStart();
 }
 
 // 20d4:0969
@@ -701,6 +703,7 @@ void SpWar_EndSpaceBattle(void)
     SpWar_ApplySpaceLosses();
     SpWar_FreeWarAnims();
     ds.SpWar_PlayerWon = !(ds.SpWar_AttackerShipCount == 0 || ds.SpWar_Retreated != 0);
+    EvLog_SpaceBattleEnd();
     uint8_t *buf = game_alloc(0xBCC0);
     Gfx_LoadPic(ds.SpWar_PlayerWon ? "war\\spvict" : "war\\splost", buf, 1, 0x97, 0, 0, 0x140, true,
                 Gfx_PalettePtr(), 0, 0xB0, 0x40, 0, 0xBE);

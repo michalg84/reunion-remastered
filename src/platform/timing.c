@@ -4,6 +4,7 @@
 
 #include "platform/audio.h"
 #include "platform/autopilot.h"
+#include "platform/diag.h"
 #include "platform/input.h"
 #include "platform/menu.h"
 #include "platform/video.h"
@@ -93,6 +94,7 @@ static void present(void)
 
 bool timing_wait_retrace(void)
 {
+    diag_heartbeat();
     idle_polls = 0;
     present();
     input_pump();

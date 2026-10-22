@@ -6,6 +6,7 @@
 
 #include "game/blit.h"
 #include "game/command.h"
+#include "game/evlog.h"
 #include "game/gfx.h"
 #include "game/gfxpath.h"
 #include "game/lang.h"
@@ -217,6 +218,7 @@ void GrWar_InitBattleUnits(void)
     unit(1, BASE_SLOT)->y = 4;
     unit(2, BASE_SLOT)->x = ds.Sim_PlayerAttacks == 0 ? 0xF : 0xE;
     unit(2, BASE_SLOT)->y = 4;
+    EvLog_GroundBattleStart();
 }
 
 // 1537:053a: hotspots 1..3 and 5 (hotspot 4 is not touched; the count is 4).
@@ -1068,6 +1070,7 @@ void GrWar_EndGroundBattle(void)
     else
         ds.GrWar_PlayerWon = true;
     ds.GrWar_LostShown = ds.GrWar_PlayerWon == false;
+    EvLog_GroundBattleEnd();
     uint8_t *pic = game_alloc(0xBCC0);
     Gfx_LoadPic(ds.GrWar_PlayerWon == false ? "war\\grlost" : "war\\grvict", pic, 1, 0x97, 0, 0,
                 0x140, true, Gfx_PalettePtr(), 0, 0xB0, 0x40, 0, 0xBE);

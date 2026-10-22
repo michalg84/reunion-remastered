@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 
+#include "platform/diag.h"
 #include "platform/fs.h"
 #include "platform/import.h"
 #include "platform/input.h"
@@ -458,6 +459,7 @@ bool importscreen_run(bool menu)
         if (countdown_start && SDL_GetTicks() - countdown_start >= COUNTDOWN * 1000)
             running = false;
         vid_present();
+        diag_heartbeat();
         SDL_Delay(15);
     }
     vid_set_overlay(nullptr);

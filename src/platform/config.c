@@ -15,14 +15,24 @@ static constexpr Config DEFAULTS = {
     .colony_stats = true,
     .detoxin_rate = true,
     .language = LANGUAGE_ENGLISH,
+    .diagnostics = {.hang_seconds = 3, .log_level = CONFIG_LOG_OFF},
 };
 
 Config config = DEFAULTS;
 
 static char *path;
+// dev.ini is in force: reunion.ini's own diagnostics, which config_save writes.
+static bool dev_active;
+static ConfigDiagnostics file_diagnostics;
 
 static const char *const MUSIC_NAMES[] = {"setup", "none", "soundblaster", "gus"};
 static const char *const DISPLAY_NAMES[] = {"off", "on", "desktop"};
+static const char *const LOG_LEVEL_NAMES[] = {"off", "error", "warn", "info", "debug"};
+
+const char *config_log_level_name(ConfigLogLevel level)
+{
+    return LOG_LEVEL_NAMES[level];
+}
 
 const char *config_music_name(ConfigMusic music)
 {
@@ -34,11 +44,22 @@ void config_reset(void)
     config = DEFAULTS;
     SDL_free(path);
     path = nullptr;
+    dev_active = false;
 }
 
 char *config_default_path(void)
 {
     return playerdir_path("reunion.ini");
+}
+
+char *config_dev_path(void)
+{
+    return playerdir_path("dev.ini");
+}
+
+bool config_dev_active(void)
+{
+    return dev_active;
 }
 
 static int switch_index(const ConfigSwitches *sw, const char *key)
@@ -209,21 +230,28 @@ static void set_value(const char *section, const char *key, const char *v)
         config.detoxin_rate = b;
     else if (IS("game", "language") && gamedata_language_from_name(v) < LANGUAGE_COUNT)
         config.language = gamedata_language_from_name(v);
+    else if (IS("diagnostics", "crash_dumps") && parse_bool(v, &b))
+        config.diagnostics.crash_dumps = b;
+    else if (IS("diagnostics", "hang_watchdog") && parse_bool(v, &b))
+        config.diagnostics.hang_watchdog = b;
+    else if (IS("diagnostics", "hang_seconds"))
+        parse_int(v, &config.diagnostics.hang_seconds, 1, 600);
+    else if (IS("diagnostics", "log_level"))
+        parse_name(v, (int *)&config.diagnostics.log_level, LOG_LEVEL_NAMES,
+                   (int)SDL_arraysize(LOG_LEVEL_NAMES));
+    else if (IS("diagnostics", "event_log") && parse_bool(v, &b))
+        config.diagnostics.event_log = b;
 #undef IS
 }
 
-void config_load(const char *file)
+// Reads an ini file's entries into config; with `only`, just that
+// section's. False if the file can't be read.
+static bool read_file(const char *file, const char *only)
 {
-    SDL_free(path);
-    path = file ? SDL_strdup(file) : nullptr;
-    // With a config file the port picks the music; Sound Blaster is
-    // what the shipped SETUP.SPD gives.
-    if (config.music == CONFIG_MUSIC_SETUP)
-        config.music = CONFIG_MUSIC_SOUND_BLASTER;
     size_t size;
-    char *text = path ? SDL_LoadFile(path, &size) : nullptr;
+    char *text = file ? SDL_LoadFile(file, &size) : nullptr;
     if (!text)
-        return;
+        return false;
     char section[32] = "";
     char *save = nullptr;
     for (char *line = SDL_strtok_r(text, "\n", &save); line; line = SDL_strtok_r(nullptr, "\n", &save)) {
@@ -242,15 +270,46 @@ void config_load(const char *file)
             continue;
         }
         char *eq = SDL_strchr(s, '=');
-        if (!eq)
+        if (!eq || (only && SDL_strcasecmp(section, only) != 0))
             continue;
         *eq = '\0';
         set_value(section, trim(s), trim(eq + 1));
     }
     SDL_free(text);
+    return true;
+}
+
+void config_load(const char *file)
+{
+    SDL_free(path);
+    path = file ? SDL_strdup(file) : nullptr;
+    // With a config file the port picks the music; Sound Blaster is
+    // what the shipped SETUP.SPD gives.
+    if (config.music == CONFIG_MUSIC_SETUP)
+        config.music = CONFIG_MUSIC_SOUND_BLASTER;
+    read_file(path, nullptr);
     // The menu doesn't offer "as the setup file says".
     if (config.music == CONFIG_MUSIC_SETUP)
         config.music = CONFIG_MUSIC_SOUND_BLASTER;
+}
+
+bool config_load_dev(const char *file, bool all_on)
+{
+    ConfigDiagnostics own = dev_active ? file_diagnostics : config.diagnostics;
+    if (all_on)
+        config.diagnostics = (ConfigDiagnostics){
+            .crash_dumps = true,
+            .hang_watchdog = true,
+            .hang_seconds = config.diagnostics.hang_seconds,
+            .log_level = CONFIG_LOG_DEBUG,
+            .event_log = true,
+        };
+    bool read = read_file(file, "diagnostics");
+    if (read || all_on) {
+        file_diagnostics = own;
+        dev_active = true;
+    }
+    return read || all_on;
 }
 
 // --- Writing ------------------------------------------------------------------
@@ -264,6 +323,8 @@ bool config_save(void)
 {
     if (!path)
         return true;
+    // dev.ini's diagnostics are for this run only.
+    const ConfigDiagnostics *diag = dev_active ? &file_diagnostics : &config.diagnostics;
     char *tmp = nullptr;
     SDL_asprintf(&tmp, "%s.tmp", path);
     SDL_IOStream *io = tmp ? SDL_IOFromFile(tmp, "w") : nullptr;
@@ -294,6 +355,12 @@ bool config_save(void)
                            "colony_stats = %s\n"
                            "detoxin_rate = %s\n"
                            "language = %s ; english | german | french | italian (the CD's)\n"
+                           "\n[diagnostics] ; reports in logs/ for bug hunting (dev.ini overrides them)\n"
+                           "crash_dumps = %s\n"
+                           "hang_watchdog = %s\n"
+                           "hang_seconds = %d\n"
+                           "log_level = %s ; off | error | warn | info | debug\n"
+                           "event_log = %s\n"
                            "\n[improvements]\n",
                            on_off(config.freeze_money), on_off(config.freeze_ore),
                            MUSIC_NAMES[config.music], on_off(config.effects), config.music_volume,
@@ -302,7 +369,9 @@ bool config_save(void)
                            config.fullscreen_height, (double)config.fullscreen_refresh,
                            on_off(config.skip_intro), on_off(config.colony_stats),
                            on_off(config.detoxin_rate),
-                           gamedata_language_name(config.language)) > 0;
+                           gamedata_language_name(config.language), on_off(diag->crash_dumps),
+                           on_off(diag->hang_watchdog), diag->hang_seconds,
+                           LOG_LEVEL_NAMES[diag->log_level], on_off(diag->event_log)) > 0;
     for (int i = 0; ok && i < config.improvements.count; i++)
         ok = SDL_IOprintf(io, "%s = %s\n", config.improvements.keys[i],
                           on_off(config.improvements.on[i])) > 0;

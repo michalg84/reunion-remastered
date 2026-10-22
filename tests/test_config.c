@@ -118,6 +118,30 @@ int main(void)
     config_load(path);
     CHECK(config.music == CONFIG_MUSIC_SOUND_BLASTER);
 
+    // Diagnostics: off without a file; read and written back.
+    config_reset();
+    const ConfigDiagnostics *d = &config.diagnostics;
+    CHECK(!d->crash_dumps && !d->hang_watchdog && !d->event_log && d->log_level == CONFIG_LOG_OFF);
+    CHECK(d->hang_seconds == 3 && !config_dev_active());
+    write_file(path, "[diagnostics]\ncrash_dumps = on\nhang_seconds = 0\nlog_level = WARN\n");
+    config_load(path);
+    CHECK(d->crash_dumps && !d->hang_watchdog && d->hang_seconds == 3 && d->log_level == CONFIG_LOG_WARN);
+
+    // dev.ini: only its [diagnostics], for the run; reunion.ini keeps its own.
+    char dev[256];
+    SDL_snprintf(dev, sizeof dev, "%s/dev.ini", dir);
+    write_file(dev, "[diagnostics]\nevent_log = on\nhang_seconds = 10\n[cheats]\nfreeze_money = on\n");
+    CHECK(config_load_dev(dev, false) && config_dev_active());
+    CHECK(d->crash_dumps && d->event_log && d->hang_seconds == 10 && !config.freeze_money);
+    CHECK(config_save());
+    config_reset();
+    config_load(path);
+    CHECK(d->crash_dumps && !d->event_log && d->hang_seconds == 3 && d->log_level == CONFIG_LOG_WARN);
+    // --dev without a file: everything on; a missing file alone does nothing.
+    SDL_RemovePath(dev);
+    CHECK(!config_load_dev(dev, false) && !config_dev_active());
+    CHECK(config_load_dev(dev, true) && d->hang_watchdog && d->event_log && d->log_level == CONFIG_LOG_DEBUG);
+
     config_reset();
     char tmp[300];
     SDL_snprintf(tmp, sizeof tmp, "%s.tmp", path);
