@@ -1,0 +1,18 @@
+; Development overlay: copy to dev.ini in the player's folder
+; (Windows: %APPDATA%\Reunion\Reunion\, Linux: ~/.local/share/Reunion/Reunion/,
+; macOS: ~/Library/Application Support/Reunion/Reunion/).
+;
+; The game reads it after reunion.ini and never writes it. Only [diagnostics]
+; counts; it replaces reunion.ini's for the run, and the port menu (F1, System)
+; shows the values without changing them. Without dev.ini a player's game
+; writes no logs. --dev on the command line (or REUNION_DEV=1) turns
+; everything on, as below, without a file.
+;
+; Everything goes to logs/ in the player's folder (src/platform/diag.h).
+
+[diagnostics]
+crash_dumps = on     ; crash-*.txt (the stack) and crash-*.dmp (Windows minidump)
+hang_watchdog = on   ; hang-*-N.txt when the game loop stands still...
+hang_seconds = 3     ; ...this long
+log_level = debug    ; reunion-*.log: off | error | warn | info | debug
+event_log = on       ; events-*.jsonl: battles, story, daily state (src/game/evlog.h)

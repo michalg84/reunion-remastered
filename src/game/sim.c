@@ -16,6 +16,7 @@
 #include "game/courses.h"
 #include "game/droids.h"
 #include "game/dseg.h"
+#include "game/evlog.h"
 #include "game/fixes.h"
 #include "game/improvements.h"
 #include "game/gfx.h"
@@ -1336,6 +1337,7 @@ void Sim_CheckEnemyAttacks(void)
                 ds.Game_CurrentScreen = 0x1D;
                 ds.Game_ScreenSwitch = 1;
             }
+            EvLog_Attack(r, f, defended, defended || ds.SpWar_GroundBattle != 0);
             ds.Sim_PlayerAttacks = 0;
             fc->NextMission = 0;
             ds.SpWar_EnemyRace = r;

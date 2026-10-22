@@ -21,6 +21,27 @@ typedef enum : int {
     CONFIG_DESKTOP,     // borderless at the desktop resolution
 } ConfigDisplay;
 
+// [diagnostics] log_level: what goes to logs/reunion-*.log (platform/diag.h).
+typedef enum : int {
+    CONFIG_LOG_OFF,  // no log file
+    CONFIG_LOG_ERROR,
+    CONFIG_LOG_WARN,
+    CONFIG_LOG_INFO,
+    CONFIG_LOG_DEBUG,
+} ConfigLogLevel;
+
+// [diagnostics]: reports for finding bugs and tuning the game, written to
+// logs/ in the player's folder (platform/diag.h). All off by default: a
+// player's game writes nothing. dev.ini (config_load_dev) turns them on for
+// development without touching reunion.ini.
+typedef struct ConfigDiagnostics {
+    bool crash_dumps;    // a report (stack, minidump on Windows) when the game crashes
+    bool hang_watchdog;  // a report when the game loop stands still
+    int hang_seconds;    // ... for this long
+    ConfigLogLevel log_level;
+    bool event_log;      // logs/events-*.jsonl: battles, story, daily state (game/evlog.h)
+} ConfigDiagnostics;
+
 enum : int {
     CONFIG_MAX_SWITCHES = 32,
     CONFIG_KEY_SIZE = 40,
@@ -66,6 +87,7 @@ typedef struct Config {
     ConfigSwitches fixes;
     ConfigSwitches improvements;
     ConfigBindings keys;
+    ConfigDiagnostics diagnostics;
 } Config;
 
 extern Config config;
@@ -79,8 +101,20 @@ void config_load(const char *path);
 char *config_default_path(void);
 // Writes the file if config_load set one. False on a write error.
 bool config_save(void);
-// Back to the built-in defaults; forgets the path (tests).
+// Back to the built-in defaults; forgets the path and dev.ini (tests).
 void config_reset(void);
+
+// The development overlay: dev.ini in the player's folder, read after
+// reunion.ini and never written. Only its [diagnostics] count; they replace
+// reunion.ini's for this run, and config_save keeps writing reunion.ini's.
+// `all_on` (--dev, REUNION_DEV=1) first turns every diagnostic on, as if
+// the file said so. False if neither the file nor all_on applied.
+bool config_load_dev(const char *path, bool all_on);
+// The default path: dev.ini in the player's folder. Free with SDL_free.
+char *config_dev_path(void);
+// dev.ini (or --dev) set the diagnostics: the port menu shows them but
+// doesn't change them.
+bool config_dev_active(void);
 
 // A fix's or an improvement's switch: on unless the file says off.
 bool config_fix(const char *key);
@@ -94,3 +128,4 @@ void config_set_binding(const char *action, const char *keys);
 
 // Names as written in the file.
 const char *config_music_name(ConfigMusic music);
+const char *config_log_level_name(ConfigLogLevel level);

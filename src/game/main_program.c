@@ -19,6 +19,7 @@
 #include "game/credits.h"
 #include "game/droids.h"
 #include "game/dseg.h"
+#include "game/evlog.h"
 #include "game/fixes.h"
 #include "game/gfx.h"
 #include "game/gfxpath.h"
@@ -342,6 +343,7 @@ static void advance_hour(bool held)
     Sim_ProcessPubTimers();
     ds.Game_Ticks = 0;
     Gfx_DrawCredits();
+    EvLog_Hour();  // port diagnostics (game/evlog.h)
 }
 
 // The per-screen animations run once per frame while no switch is pending.

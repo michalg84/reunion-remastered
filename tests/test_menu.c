@@ -217,8 +217,11 @@ int main(void)
     // Tab moves between sections and keeps the focus on the rows.
     press(SDLK_TAB);
     CHECK(menu_section() == SEC_SYSTEM && menu_focus() == 0);
-    CHECK(menu_row_count() == 3 && row_is(0, "> Import game data...") && row_is(1, "> Restart now")
+    CHECK(menu_row_count() == 8 && row_is(0, "> Import game data...") && row_is(1, "> Restart now")
           && row_is(2, "> Quit now"));
+    // The diagnostics (platform/diag.h): off without a config file.
+    CHECK(row_is(3, "[ ] Crash reports") && row_is(4, "[ ] Hang reports") && row_is(5, "[ ] Event log")
+          && row_is(6, "Log file <off>") && row_is(7, "> Open logs folder"));
     press(SDLK_TAB);
     CHECK(menu_section() == SEC_CHEATS);
     menu_handle_event(&(SDL_Event){.key = {.type = SDL_EVENT_KEY_DOWN, .key = SDLK_TAB,

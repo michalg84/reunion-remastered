@@ -4,6 +4,7 @@
 
 #include "platform/audio.h"
 #include "platform/config.h"
+#include "platform/diag.h"
 #include "platform/importscreen.h"
 #include "platform/input.h"
 #include "platform/panel.h"
@@ -64,6 +65,11 @@ typedef enum : int {
     R_FIXES_ON,
     R_FIXES_OFF,
     R_IMPORT,
+    R_CRASH_DUMPS,
+    R_HANG_WATCHDOG,
+    R_EVENT_LOG,
+    R_LOG_LEVEL,
+    R_OPEN_LOGS,
     R_RESTART,
     R_QUIT,
     R_NOTE,
@@ -175,6 +181,31 @@ static void size_text(char *out, size_t size)
         SDL_snprintf(out, size, "%dx%d", config.fullscreen_width, config.fullscreen_height);
 }
 
+// System: the diagnostics (platform/diag.h). dev.ini sets them for the
+// run; the menu then only shows them.
+static void add_diagnostics(void)
+{
+    bool dev = config_dev_active();
+    const char *why = dev ? "Set by dev.ini for this run." : nullptr;
+    const ConfigDiagnostics *d = &config.diagnostics;
+    Row *r = add(ROW_TOGGLE, R_CRASH_DUMPS, "Crash reports",
+                 why ? why : "On a crash, a report in the logs folder to send with a bug.");
+    r->on = d->crash_dumps;
+    r->enabled = !dev;
+    r = add(ROW_TOGGLE, R_HANG_WATCHDOG, "Hang reports",
+            why ? why : "When the game stands still for seconds, a report in logs.");
+    r->on = d->hang_watchdog;
+    r->enabled = !dev;
+    r = add(ROW_TOGGLE, R_EVENT_LOG, "Event log",
+            why ? why : "Battles, story and daily state in logs/events-*.jsonl.");
+    r->on = d->event_log;
+    r->enabled = !dev;
+    r = add(ROW_CHOICE, R_LOG_LEVEL, "Log file", why ? why : "What goes to logs/reunion-*.log.");
+    SDL_strlcpy(r->value, config_log_level_name(d->log_level), sizeof r->value);
+    r->enabled = !dev;
+    add(ROW_ACTION, R_OPEN_LOGS, "Open logs folder", "The reports, logs and event logs.");
+}
+
 static void build_rows(void)
 {
     row_count = 0;
@@ -284,6 +315,7 @@ static void build_rows(void)
             "Replace the game data with another copy: a folder, a ZIP or the CD's ISO.");
         add(ROW_ACTION, R_RESTART, "Restart now", "Back to the title screen. Unsaved progress is lost.");
         add(ROW_ACTION, R_QUIT, "Quit now", "Unsaved progress is lost.");
+        add_diagnostics();
         break;
     default:
         break;
@@ -434,6 +466,33 @@ static void act(const Row *r, int dir)
         if (input_quit_requested())
             close_menu();
         return;
+    case R_CRASH_DUMPS:
+        config.diagnostics.crash_dumps = !config.diagnostics.crash_dumps;
+        diag_apply();
+        break;
+    case R_HANG_WATCHDOG:
+        config.diagnostics.hang_watchdog = !config.diagnostics.hang_watchdog;
+        diag_apply();
+        break;
+    case R_EVENT_LOG:
+        config.diagnostics.event_log = !config.diagnostics.event_log;
+        diag_apply();
+        break;
+    case R_LOG_LEVEL:
+        config.diagnostics.log_level = (ConfigLogLevel)step(config.diagnostics.log_level, dir ? dir : 1,
+                                                            CONFIG_LOG_OFF, CONFIG_LOG_DEBUG, true);
+        diag_apply();
+        break;
+    case R_OPEN_LOGS: {
+        const char *dir = diag_logs_dir();
+        char *url = nullptr;
+        if (dir)
+            SDL_asprintf(&url, dir[0] == '/' ? "file://%s" : "file:///%s", dir);
+        if (!url || !SDL_OpenURL(url))
+            SDL_strlcpy(status, "Couldn't open the folder.", sizeof status);
+        SDL_free(url);
+        return;
+    }
     case R_RESTART:
         input_request_restart();
         close_menu();
@@ -728,6 +787,7 @@ void menu_run(void)
         while (shown && SDL_PollEvent(&e))
             menu_handle_event(&e);
         vid_present();
+        diag_heartbeat();
         SDL_Delay(15);
     }
     vid_set_overlay(nullptr);

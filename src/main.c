@@ -15,6 +15,7 @@
 
 #include "cutscene/cutscene.h"
 #include "game/dseg.h"
+#include "game/evlog.h"
 #include "game/fixes.h"
 #include "game/improvements.h"
 #include "game/keyplay.h"
@@ -28,6 +29,7 @@
 #include "platform/audio.h"
 #include "platform/autopilot.h"
 #include "platform/config.h"
+#include "platform/diag.h"
 #include "platform/fs.h"
 #include "platform/gamedata.h"
 #include "platform/import.h"
@@ -68,7 +70,7 @@ static int exit_code;
 }
 
 // Command line: [--cutscene=credits|intro|victory] [--replay=SCRIPT]
-// [--import=PATH] [--language=NAME] [DATA_DIR].
+// [--import=PATH] [--language=NAME] [--dev] [DATA_DIR].
 // The port menu's Skip intro skips the credits and intro before the game, and
 // so does an autopilot script (its frame numbers count from the game's
 // start).
@@ -86,6 +88,9 @@ static const char *import_path;
 // --language=english|german|french|italian sets the language as the port
 // menu does (scripted runs read no config file).
 static const char *language_arg;
+// --dev (or REUNION_DEV=1): every diagnostic on for this run, as dev.ini
+// can say (platform/config.h); dev.ini's own entries then apply on top.
+static bool dev_arg;
 static const char *data_arg;
 
 // A replay that goes on this many frames past the script's last event
@@ -103,6 +108,8 @@ static void parse_args(int argc, char *argv[])
             import_path = argv[i] + 9;
         else if (SDL_strncmp(argv[i], "--language=", 11) == 0)
             language_arg = argv[i] + 11;
+        else if (SDL_strcmp(argv[i], "--dev") == 0)
+            dev_arg = true;
         else if (!data_arg)
             data_arg = argv[i];
     }
@@ -244,6 +251,11 @@ static void setup_config(void)
     if (!scripted) {
         char *path = config_default_path();
         config_load(path);
+        SDL_free(path);
+        // Development: dev.ini's diagnostics, never written back.
+        const char *env = SDL_getenv("REUNION_DEV");
+        path = config_dev_path();
+        config_load_dev(path, dev_arg || (env && SDL_strcmp(env, "1") == 0));
         SDL_free(path);
     }
     if (language_arg) {
@@ -427,6 +439,8 @@ int main(int argc, char *argv[])
         web_open_storage();
 #endif
     setup_config();
+    diag_init();
+    EvLog_Init();
     // Headless unless SDL_VIDEO_DRIVER says otherwise (the replay is then
     // shown fast-forward).
     if (replay)
@@ -473,6 +487,7 @@ int main(int argc, char *argv[])
 
     int result = play();
     config_save();  // the window's size
+    diag_shutdown();
     audio_shutdown();
     fs_shutdown();
     vid_shutdown();
