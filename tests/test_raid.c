@@ -41,7 +41,7 @@ static char read_key(void) { return '\r'; }
 
 static char dir[128];
 
-static void reset(bool on)
+static void setup(bool on, bool zero_story)
 {
     dseg_clear();
     vid_clear();
@@ -79,6 +79,8 @@ static void reset(bool on)
     improvements.adaptive_threat = on;
     improvements.raids = on;
     config.adaptive.warn_on_launch = false;
+    if (!zero_story)
+        return;
     // The story's timers all quiet; Morgruls hostile, with a wave far ahead.
     ds.Intel_MorgrulAttack1Timer = ds.Intel_MorgrulAttack2Timer = ds.Intel_MorgrulAttack3Timer = 0;
     ds.Intel_JointAttackTimer = ds.Intel_Race7to10Timer = ds.Intel_LaunchTimer = 0;
@@ -96,6 +98,11 @@ static void reset(bool on)
     Intel_Race(MORGRULS)->Alive = 1;
     Intel_Force(MORGRULS, 2)->Units[0] = 25;  // wave 2: 25 Hunters
     Intel_Force(MORGRULS, 2)->Units[1] = 0;
+}
+
+static void reset(bool on)
+{
+    setup(on, true);
 }
 
 static TBody *colony(int16_t system, int16_t planet, int16_t moon)
@@ -326,6 +333,40 @@ static int count_kind(int16_t kind, int16_t s, int16_t p, int16_t m)
         n += ds.Game_Buildings[i].Kind == kind && ds.Game_Buildings[i].System == s && ds.Game_Buildings[i].Planet == p
              && ds.Game_Buildings[i].Moon == m;
     return n;
+}
+
+// The story's own state at the start of a game, nothing zeroed by the test: its
+// forces hold no raid back, and a hostile race plans one.
+static void fresh_story(void)
+{
+    setup(true, false);  // the original's races, forces and timers as they start
+    Intel_Race(MORGRULS)->Status = 2;
+    Intel_Race(MORGRULS)->Alive = 1;
+    colony(1, 3, 0);
+    ds.Game_Hour = 23;
+    hours(1);
+    CHECK(Raid_State.timer >= 800 && Raid_State.plan_race == MORGRULS);
+    int guard = 0;
+    while (Raid_State.fleet[0].phase == RAID_PHASE_NONE && guard++ < 1300)
+        hours(1);
+    CHECK(Raid_State.fleet[0].phase == RAID_PHASE_FLYING && Raid_State.fleet[0].race == MORGRULS);
+    CHECK(Raid_State.fleet[0].units[0] >= 3);
+}
+
+// The surface screen of the target is open: the raid shoots when it is closed.
+static void surface_open(void)
+{
+    reset(true);
+    colony(1, 3, 0);
+    for (int i = 0; i < 40; i++)
+        add_building(7, 1, 3, 0, true);
+    arrive_at(RAID_RAID, 1, 3, 0, 5, 0);
+    ds.Game_CurrentScreen = 0x14;
+    hours(3);
+    CHECK(Raid_State.fleet[0].phase == RAID_PHASE_WAITING && count_kind(7, 1, 3, 0) == 40);
+    ds.Game_CurrentScreen = 1;
+    hours(1);
+    CHECK(Raid_State.fleet[0].phase == RAID_PHASE_NONE);
 }
 
 static void bombardment(void)
@@ -677,6 +718,8 @@ int main(int argc, char *argv[])
     planning();
     schedule_and_flight();
     gaps();
+    fresh_story();
+    surface_open();
     bombardment();
     chase_and_battle();
     battles();

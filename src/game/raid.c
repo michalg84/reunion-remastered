@@ -154,16 +154,35 @@ static int32_t hours_to_wave(void)
     return best;
 }
 
+// The ships (Hunters and Starfighters) in a race's garrison at home.
+static int32_t garrison_ships(int16_t race, int32_t *hunters, int32_t *fighters)
+{
+    const TRace *rc = Intel_Race(race);
+    const TBody *home = PlanetInfo_BodyAt(rc->HomeSystem, rc->HomeBody, 0);
+    *hunters = home ? home->Stores[0] : 0;
+    *fighters = home ? home->Stores[1] : 0;
+    return *hunters + *fighters;
+}
+
 // The hostile race whose wave is nearest, and its Hunters and Starfighters;
-// without a wave ahead, the one with the largest garrison at home. False
-// if no race is hostile (or none has ships).
-static bool nearest_wave(int16_t *race, int32_t *hunters, int32_t *fighters)
+// without a wave ahead, the one with the largest garrison at home. With a
+// `prefer` (the race that planned the mission) that race, if it is hostile
+// and has a wave or a garrison: its own ships set the size. False if no race
+// is hostile (or none has ships).
+static bool nearest_wave_of(int16_t prefer, int16_t *race, int32_t *hunters, int32_t *fighters)
 {
     WaveRef w[8];
     int n = armed_waves(w), best = -1;
     for (int i = 0; i < n; i++)
-        if (hostile(w[i].race) && w[i].hunters + w[i].fighters > 0 && (best < 0 || w[i].hours < w[best].hours))
+        if (hostile(w[i].race) && (prefer == 0 || w[i].race == prefer) && w[i].hunters + w[i].fighters > 0
+            && (best < 0 || w[i].hours < w[best].hours))
             best = i;
+    if (best < 0 && prefer > 0 && hostile(prefer) && garrison_ships(prefer, hunters, fighters) > 0) {
+        *race = prefer;
+        return true;
+    }
+    if (best < 0 && prefer > 0)
+        return nearest_wave_of(0, race, hunters, fighters);
     if (best >= 0) {
         *race = w[best].race;
         *hunters = w[best].hunters;
@@ -174,10 +193,8 @@ static bool nearest_wave(int16_t *race, int32_t *hunters, int32_t *fighters)
     for (int16_t r = 2; r <= 12; r++) {
         if (!hostile(r))
             continue;
-        const TRace *rc = Intel_Race(r);
-        const TBody *home = PlanetInfo_BodyAt(rc->HomeSystem, rc->HomeBody, 0);
-        int32_t h = home ? home->Stores[0] : 0, f = home ? home->Stores[1] : 0;
-        if (h + f > most) {
+        int32_t h, f;
+        if (garrison_ships(r, &h, &f) > most) {
             most = h + f;
             *race = r;
             *hunters = h;
@@ -185,6 +202,11 @@ static bool nearest_wave(int16_t *race, int32_t *hunters, int32_t *fighters)
         }
     }
     return most > 0;
+}
+
+static bool nearest_wave(int16_t *race, int32_t *hunters, int32_t *fighters)
+{
+    return nearest_wave_of(0, race, hunters, fighters);
 }
 
 // A story fleet is on its way or waits at its target.
@@ -271,12 +293,6 @@ static void where_is(char *buf, size_t size, int s, int p, int m)
     PlanetInfo_GetBodyLongName(buf, size, (int16_t)s, (int16_t)p, (int16_t)m);
 }
 
-// What a race's fleet is called in a sentence: the race, in the message's width.
-static void race_label(int16_t race, char *buf, size_t size)
-{
-    Adaptive_RaceLabel(race, buf, size);
-}
-
 static bool is_early(void)
 {
     return ds.Game_StoryStage <= EARLY_STAGE;
@@ -326,13 +342,13 @@ static void warn_early(void)
         return;
     int16_t race = 0;
     int32_t hunters = 0, fighters = 0, units[2];
-    if (!nearest_wave(&race, &hunters, &fighters))
+    if (!nearest_wave_of((int16_t)st->plan_race, &race, &hunters, &fighters))
         return;
     int32_t defence = Adaptive_DefenceAt((int16_t)st->plan_system, (int16_t)st->plan_planet);
     Raid_PlanFleet(defence, hunters, fighters, is_early(), units);
     int32_t ships = units[0] + units[1];
     char label[32], where[96], text[360];
-    race_label((int16_t)st->plan_race, label, sizeof label);
+    Adaptive_RaceLabel((int16_t)st->plan_race, label, sizeof label);
     where_is(where, sizeof where, st->plan_system, st->plan_planet, st->plan_moon);
     int from = SDL_max((int)st->timer - 24, 1), to = (int)st->timer + 24;
     const char *what = st->plan_mission == RAID_BLOCKADE ? "will blockade" : "will raid";
@@ -353,7 +369,7 @@ static int16_t travel_hours(int16_t race, int s, int p)
 static void announce(const char *kind_text, const RaidFleet *f, const char *tail)
 {
     char label[32], where[96], text[300];
-    race_label((int16_t)f->race, label, sizeof label);
+    Adaptive_RaceLabel((int16_t)f->race, label, sizeof label);
     where_is(where, sizeof where, f->system, f->planet, f->moon);
     SDL_snprintf(text, sizeof text, "   %s | %s fleet | %s | %s |", kind_text, label, where, tail);
     Message_ShowMessage(text);
@@ -401,7 +417,7 @@ static void launch_planned(void)
     int32_t hunters = 0, fighters = 0, units[2];
     int s = st->plan_system, p = st->plan_planet, m = st->plan_moon;
     bool ok = st->plan_mission != RAID_NONE && hostile((int16_t)st->plan_race)
-              && target_is_ours(s, p, m) && nearest_wave(&race, &hunters, &fighters);
+              && target_is_ours(s, p, m) && nearest_wave_of((int16_t)st->plan_race, &race, &hunters, &fighters);
     if (ok) {
         // The race that planned it, if it is still the nearest; else the nearest.
         int32_t defence = Adaptive_DefenceAt((int16_t)s, (int16_t)p);
@@ -449,7 +465,7 @@ static void chased(int slot)
     RaidState *st = &Raid_State;
     RaidFleet *f = &st->fleet[slot];
     char label[32], where[96], text[260];
-    race_label((int16_t)f->race, label, sizeof label);
+    Adaptive_RaceLabel((int16_t)f->race, label, sizeof label);
     where_is(where, sizeof where, f->system, f->planet, f->moon);
     SDL_snprintf(text, sizeof text, "   The %s fleet turned back | seeing your defence at | %s |", label, where);
     Message_ShowMessage(text);
@@ -516,7 +532,7 @@ static void bombard(const RaidFleet *f, int32_t defence)
             b->Stores[k] -= (int32_t)((int64_t)b->Stores[k] * pm_ore / 1000);
     EvLog_Raid("raid", "bombard", f->race, s, p, m, f->units[0], f->units[1], lost, pm_ore);
     char label[32], where[96], text[300];
-    race_label((int16_t)f->race, label, sizeof label);
+    Adaptive_RaceLabel((int16_t)f->race, label, sizeof label);
     where_is(where, sizeof where, s, p, m);
     SDL_snprintf(text, sizeof text, "   RAID | The %s shot at | %s | %d buildings lost, ore %d.%d%% |", label, where, (int)lost,
                  (int)(pm_ore / 10), (int)(pm_ore % 10));
@@ -570,6 +586,8 @@ static bool confront(int slot)
                 EvLog_Raid("blockade", "hold", f->race, f->system, f->planet, f->moon, f->units[0], f->units[1], 0, 0);
             }
         } else {
+            if (ds.Game_CurrentScreen == 0x14)
+                return false;  // the surface is on screen: not while its map is drawn (as a meteorite waits)
             bombard(f, 0);
             leave(slot, "leave");
         }
@@ -756,7 +774,7 @@ bool Raid_BattleOver(bool playerWon)
     st->fled = 0;
     if (fled) {
         char label[32], text[200];
-        race_label((int16_t)f->race, label, sizeof label);
+        Adaptive_RaceLabel((int16_t)f->race, label, sizeof label);
         SDL_snprintf(text, sizeof text, "   The %s fleet withdrew |", label);
         Message_ShowMessage(text);
         leave(slot, "withdrew");
