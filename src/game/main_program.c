@@ -42,6 +42,7 @@
 #include "game/planetlist.h"
 #include "game/portcmd.h"
 #include "game/protect.h"
+#include "game/raid.h"
 #include "game/pub.h"
 #include "game/rawtext.h"
 #include "game/research.h"
@@ -308,6 +309,7 @@ static void startup(void)
     StoreFull_Reset();  // port improvement (game/storefull.h)
     Courses_Reset();  // port improvement (game/courses.h)
     Adaptive_Reset();  // port improvement (game/adaptive.h)
+    Raid_Reset();  // port improvement (game/raid.h)
     if (ds.Game_StartChoice == 2) {
         ds.Game_PrevScreen = 1;
         ds.Game_CurrentScreen = 12;
@@ -343,6 +345,7 @@ static void advance_hour(bool held)
     Sim_ProcessTravellingGroups();
     Routes_Hour();  // port improvement (game/routes.h)
     Sim_CheckEnemyAttacks();
+    Raid_Hour();  // port improvement (game/raid.h)
     Sim_ProcessPubTimers();
     ds.Game_Ticks = 0;
     Gfx_DrawCredits();
@@ -1353,25 +1356,27 @@ static void screen_space_battle(void)
             Intel_SpaceBattleLost(ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet);
         else
             Intel_SpaceBattleWon(ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet);
+        // Improvement (game/raid.h): a raid's battle has nothing to do with the story.
+        bool raid_battle = Raid_BattleOver(ds.SpWar_PlayerWon);
         select_battle_body();
         if (ds.Sim_PlayerAttacks)
             ds.Game_CurrentScreen = ds.SpWar_GroundBattle == 0 || !ds.SpWar_PlayerWon ? 7 : 19;
         if (ds.Sim_PlayerAttacks == 0)
             ds.Game_CurrentScreen = ds.SpWar_GroundBattle == 0 || ds.SpWar_PlayerWon ? 7 : 19;
         ds.Game_ScreenSwitch = 1;
-        if (ds.SpWar_PlayerWon && ds.Intel_FirstBattleWon == 0) {
+        if (ds.SpWar_PlayerWon && !raid_battle && ds.Intel_FirstBattleWon == 0) {
             ds.Intel_FirstBattleWon = 1;
             Intel_ScheduleIdea(0xD, 0x14, 0x14);
             Intel_ScheduleIdea(0x11, 0x5A, 0x32);
         }
-        if (ds.SpWar_PlayerWon && ds.Intel_MorgrulAttack2Open) {
+        if (ds.SpWar_PlayerWon && !raid_battle && ds.Intel_MorgrulAttack2Open) {
             ds.Intel_MorgrulAttack2Open = 0;
             Intel_ScheduleIdea(0x12, 3, 0);
             Message_ShowMessageLine(0x10);
             AlienTalk_StartAlienScene(3);
             ds.Game_StoryStage = 3;
         }
-        if (ds.SpWar_PlayerWon && ds.Intel_MorgrulAttack3Open) {
+        if (ds.SpWar_PlayerWon && !raid_battle && ds.Intel_MorgrulAttack3Open) {
             ds.Intel_MorgrulAttack3Open = 0;
             Message_ShowMessageLine(0x13);
             ds.Pub_People[1].State = 2;
@@ -1381,7 +1386,7 @@ static void screen_space_battle(void)
             AlienTalk_StartAlienScene(3);
             ds.Game_StoryStage = 4;
         }
-        if (ds.SpWar_PlayerWon && ds.SpWar_BattleSystem == 8)
+        if (ds.SpWar_PlayerWon && !raid_battle && ds.SpWar_BattleSystem == 8)
             ds.Pub_People[9].State = 2;
     }
 }

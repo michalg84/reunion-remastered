@@ -604,6 +604,26 @@ void EvLog_Init(void)
     prev.valid = false;
 }
 
+void EvLog_Raid(const char *kind, const char *what, int16_t race, int system, int planet, int moon,
+                int hunters, int fighters, int a, int b)
+{
+    if (!EvLog_On())
+        return;
+    Json *j = begin(kind);
+    j_str(j, "what", what);
+    j_int(j, "race", race);
+    char name[32] = "";
+    if (race >= 2 && race <= 12)
+        race_name(name, sizeof name, race);
+    j_str(j, "name", name);
+    j_site(j, system, planet, moon);
+    j_int(j, "hunters", hunters);
+    j_int(j, "fighters", fighters);
+    j_int(j, "a", a);
+    j_int(j, "b", b);
+    end(j);
+}
+
 void EvLog_Adaptive(const char *what, int wave, int16_t race, int a, int b, int c)
 {
     if (!EvLog_On())

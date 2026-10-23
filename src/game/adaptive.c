@@ -97,6 +97,34 @@ int32_t Adaptive_PlayerPower(void)
     return (int32_t)SDL_min(power, INT32_MAX);
 }
 
+int32_t Adaptive_FleetWeightAt(int16_t system, int16_t planet)
+{
+    int64_t power = 0;
+    // The ships a space battle there would take (SpWar_InitSpaceFleets).
+    for (int16_t li = 0; li < 2; li++) {
+        int16_t n = li == 0 ? ds.Game_GroupCount : ds.Game_PlanetForceCount;
+        for (int16_t g = 1; g <= n; g++) {
+            const TGroup *grp = Groups_At(li, g);
+            if (!(grp->System == system && grp->Planet == planet
+                  && (grp->Status == 1 || grp->Status == 2 || grp->Status == 7)
+                  && (grp->Kind == 1 || grp->Kind == 3 || grp->Kind == 5)))
+                continue;
+            for (int c = 0; c < 4; c++) {
+                const TGroupSlot *ships = &grp->Units[0][c];
+                if (ships->Count > 0)
+                    power += (int64_t)ships->Count * Adaptive_ShipWeight(player_ship_damage(ships), ds.SpWar_ClassA[c]);
+            }
+        }
+    }
+    return (int32_t)SDL_min(power, INT32_MAX);
+}
+
+int32_t Adaptive_DefenceAt(int16_t system, int16_t planet)
+{
+    int64_t w = (int64_t)Adaptive_FleetWeightAt(system, planet) + Defence_PlanetWeight(system, planet);
+    return (int32_t)SDL_min(w, INT32_MAX);
+}
+
 // The combat weight of a race force: ships by class, ground units 1 each.
 static int32_t force_power(const TRaceForce *f)
 {
@@ -185,6 +213,13 @@ static void target_line(char *out, size_t size)
 }
 
 // The race's home system has an observatory, or a satellite watches its home body.
+static bool has_intel(int16_t race);
+
+bool Adaptive_WarnsOf(int16_t race)
+{
+    return (config.adaptive.warn_intel && has_intel(race)) || Adaptive_State.contract[race];
+}
+
 static bool has_intel(int16_t race)
 {
     const TRace *r = Intel_Race(race);

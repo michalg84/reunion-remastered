@@ -18,6 +18,7 @@
 #include "game/mouse.h"
 #include "game/music.h"
 #include "game/options.h"
+#include "game/raid.h"
 #include "game/routes.h"
 #include "game/sound.h"
 #include "game/storefull.h"
@@ -108,7 +109,7 @@ static SlotFormat slot_format[AUTOSAVE_SLOT + 1];
 // The port's format: a header, then the DOS blocks with the building table
 // cut to its count, then the routes and, from version 2, the courses.
 static const uint8_t PORT_MAGIC[8] = {'R', 'E', 'U', 'N', 'I', 'O', 'N', 0x1A};
-enum : uint16_t { PORT_VERSION = 4 };
+enum : uint16_t { PORT_VERSION = 5 };
 
 // --- The block list -----------------------------------------------------------
 
@@ -195,7 +196,7 @@ static bool records(SDL_IOStream *f, void *table, uint16_t count, uint16_t size,
 
 // The port's format has its records after the blocks: the routes'
 // (game/routes.h), then from version 2 the courses' (game/courses.h), from
-// version 4 the adaptive threat's (game/adaptive.h).
+// version 4 the adaptive threat's (game/adaptive.h), from version 5 the raids' (game/raid.h).
 static bool port_records(SDL_IOStream *f, uint16_t version, bool save)
 {
     if (!records(f, Routes_Table, ROUTE_SLOTS, sizeof(Route), save))
@@ -203,15 +204,23 @@ static bool port_records(SDL_IOStream *f, uint16_t version, bool save)
     if (version < 2) {
         Courses_Reset();
         Adaptive_Reset();
+        Raid_Reset();
         return true;
     }
     if (!records(f, Courses_Extra, COURSE_KINDS, sizeof(Course), save))
         return false;
     if (version < 4) {  // version 3 had the record without the League's first wave
         Adaptive_Reset();
+        Raid_Reset();
         return true;
     }
-    return records(f, &Adaptive_State, 1, sizeof(AdaptiveState), save);
+    if (!records(f, &Adaptive_State, 1, sizeof(AdaptiveState), save))
+        return false;
+    if (version < 5) {  // version 4 had no raids
+        Raid_Reset();
+        return true;
+    }
+    return records(f, &Raid_State, 1, sizeof(RaidState), save);
 }
 
 // The slot name as string[19] (the first 20 bytes of the string[20] at
@@ -256,6 +265,7 @@ static bool transfer(SDL_IOStream *f, uint8_t *name, bool save, bool port)
         Routes_Reset();
         Courses_Reset();
         Adaptive_Reset();
+        Raid_Reset();
     }
     // Port addition: frozen cheats (game/options.h) hold the loaded stocks.
     // Saves of earlier port versions may end in a cheats trailer; it is
@@ -269,7 +279,7 @@ static bool transfer(SDL_IOStream *f, uint8_t *name, bool save, bool port)
 
 bool SaveLoad_PortFormat(void)
 {
-    return Improvements_PortSaves() || Routes_Any() || Courses_Any()
+    return Improvements_PortSaves() || Routes_Any() || Courses_Any() || Raid_Any()
            || ds.Game_BuildingCount > BUILDINGS_DOS || Defence_AnyBattery();
 }
 

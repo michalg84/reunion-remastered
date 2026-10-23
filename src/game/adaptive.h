@@ -73,6 +73,15 @@ int32_t Adaptive_PlayerPower(void);
 // (at the 11% chance to hit) and its hit points.
 int32_t Adaptive_ShipWeight(int64_t damage, int32_t hp);
 
+// The weight (tenths of a Hunter) of the player's ships at the planet, and
+// with the batteries of the planet (game/defence.h): what a raid meets there.
+int32_t Adaptive_FleetWeightAt(int16_t system, int16_t planet);
+int32_t Adaptive_DefenceAt(int16_t system, int16_t planet);
+
+// An advance warning of the race's fleets is wanted: an observatory or
+// satellite at its home (warn_intel), or a contract.
+bool Adaptive_WarnsOf(int16_t race);
+
 // The story timer of a wave counts down one hour (the place of sim.c's
 // tick()): true when it runs out. With the switch off that is all it does.
 bool Adaptive_Tick(int wave, int16_t *timer, int16_t race, int16_t force);

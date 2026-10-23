@@ -50,3 +50,8 @@ void EvLog_GroundBattleEnd(void);
 // The adaptive threat (game/adaptive.h) did something: what is "wait",
 // "scale", "warn_early" or "contract"; the three numbers depend on it.
 void EvLog_Adaptive(const char *what, int wave, int16_t race, int a, int b, int c);
+// A raid, blockade or scout (game/raid.h): `kind` is "raid", "blockade" or
+// "scout"; `what` "plan", "warn", "launch", "arrive", "leave", "chased", "battle", "bombard"...;
+// the target, the fleet's Hunters and Starfighters, and two numbers that depend on it.
+void EvLog_Raid(const char *kind, const char *what, int16_t race, int system, int planet, int moon,
+                int hunters, int fighters, int a, int b);

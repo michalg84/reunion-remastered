@@ -54,6 +54,10 @@ typedef struct Improvements {
     // cannon and one Energy shield to a body. Saves with a battery are in
     // the port's format.
     bool planetary_defence;
+    // Alien raids, blockades and scouts between the waves, on the colonies
+    // outside New Earth (game/raid.h). Needs adaptive_threat. Off until
+    // played. The raid fleets are a port record: saves then won't load in DOS.
+    bool raids;
 } Improvements;
 
 extern Improvements improvements;

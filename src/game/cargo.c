@@ -8,7 +8,9 @@
 #include "game/lang.h"
 #include "game/le.h"
 #include "game/mouse.h"
+#include "game/message.h"
 #include "game/planetinfo.h"
+#include "game/raid.h"
 #include "game/system.h"
 
 // Routines missing from their units' headers.
@@ -122,6 +124,18 @@ void Cargo_CargoScreen(void)
     if (ds.Game_MenuCommand == 0x10) {
         ds.Game_ScreenSwitch = true;
         ds.Game_CurrentScreen = 0x11;
+    }
+
+    // Improvement (game/raid.h): under a blockade nothing is loaded or unloaded.
+    {
+        int16_t hit_row = (int16_t)(ds.Game_HotspotHit - 0x14), back_row = (int16_t)(ds.Game_HotspotHit - 0x27);
+        if (((hit_row > 0 && hit_row < 0x14) || (back_row > 0 && back_row < 0x14))
+            && Raid_Blockaded(group_at(ds.Game_GroupList, ds.Game_SelGroup)->System,
+                              group_at(ds.Game_GroupList, ds.Game_SelGroup)->Planet,
+                              group_at(ds.Game_GroupList, ds.Game_SelGroup)->Moon)) {
+            Message_ShowMessageNoLog(" An alien blockade: nothing can be loaded or unloaded here ");
+            ds.Game_HotspotHit = 0;
+        }
     }
 
     // Ship -> planet (hotspots 1..19, button column at x = 44h).
@@ -342,6 +356,8 @@ int32_t Cargo_ShipRoom(const TGroup *g)
 
 int32_t Cargo_MoveAllOre(TGroup *g, bool to_ship)
 {
+    if (Raid_Blockaded(g->System, g->Planet, g->Moon))
+        return 0;  // improvement (game/raid.h): nothing moves under a blockade
     bool home = g->System == 1 && g->Planet == 5 && g->Moon == 0;
     // Longints of a packed record, as Cargo_Stores points at them.
     uint8_t *stores = home ? (uint8_t *)ds.Game_HomeStock

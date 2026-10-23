@@ -66,6 +66,11 @@ typedef struct ConfigAdaptive {
     bool warn_intel;       // a message 100-200 h before, with an observatory or satellite at its home
     int contract_min;      // an intelligence contract costs between these, drawn per race
     int contract_max;
+    int raid_min;          // hours between the raids (game/raid.h): drawn between these
+    int raid_max;
+    int raid_gap;          // no raid this near a story wave, hours
+    int raid_chase_min;    // a raid chased off without a fight delays the next by this
+    int raid_chase_max;
 } ConfigAdaptive;
 
 enum : int {

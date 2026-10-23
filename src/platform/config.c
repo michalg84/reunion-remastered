@@ -19,7 +19,8 @@ static constexpr Config DEFAULTS = {
     .adaptive = {.level = CONFIG_LEVEL_NORMAL, .band_low = 80, .band_high = 120, .scale_min = 70,
                  .scale_max = 120, .delay_max = 40, .delay_bonus = 4, .credits_per_unit = 5000,
                  .colony_units = 3, .warn_on_launch = true, .warn_intel = true,
-                 .contract_min = 50000, .contract_max = 80000},
+                 .contract_min = 50000, .contract_max = 80000, .raid_min = 800, .raid_max = 1200,
+                 .raid_gap = 200, .raid_chase_min = 100, .raid_chase_max = 200},
 };
 
 Config config = DEFAULTS;
@@ -81,6 +82,13 @@ static bool switch_on(const ConfigSwitches *sw, const char *key)
     return i < 0 || sw->on[i];
 }
 
+// Improvements that are off until the config turns them on: new ones that
+// have not been played yet.
+static bool improvement_default_off(const char *key)
+{
+    return SDL_strcmp(key, "raids") == 0;
+}
+
 static void set_switch(ConfigSwitches *sw, const char *key, bool on)
 {
     int i = switch_index(sw, key);
@@ -105,6 +113,8 @@ void config_set_fix(const char *key, bool on)
 
 bool config_improvement(const char *key)
 {
+    if (switch_index(&config.improvements, key) < 0)
+        return !improvement_default_off(key);
     return switch_on(&config.improvements, key);
 }
 
@@ -272,6 +282,16 @@ static void set_value(const char *section, const char *key, const char *v)
         parse_int(v, &config.adaptive.contract_min, 0, 10000000);
     else if (IS("adaptive", "contract_max"))
         parse_int(v, &config.adaptive.contract_max, 0, 10000000);
+    else if (IS("adaptive", "raid_min"))
+        parse_int(v, &config.adaptive.raid_min, 24, 100000);
+    else if (IS("adaptive", "raid_max"))
+        parse_int(v, &config.adaptive.raid_max, 24, 100000);
+    else if (IS("adaptive", "raid_gap"))
+        parse_int(v, &config.adaptive.raid_gap, 0, 5000);
+    else if (IS("adaptive", "raid_chase_min"))
+        parse_int(v, &config.adaptive.raid_chase_min, 0, 5000);
+    else if (IS("adaptive", "raid_chase_max"))
+        parse_int(v, &config.adaptive.raid_chase_max, 0, 5000);
 #undef IS
 }
 
@@ -406,6 +426,11 @@ bool config_save(void)
                            "warn_intel = %s ; a message 100-200 h before it, with an observatory or satellite\n"
                            "contract_min = %d ; an intelligence contract costs between these,\n"
                            "contract_max = %d ; drawn once per race\n"
+                           "raid_min = %d ; hours between the raids (the Raids improvement),\n"
+                           "raid_max = %d ; drawn between these\n"
+                           "raid_gap = %d ; no raid this near a story wave, hours\n"
+                           "raid_chase_min = %d ; a raid chased off without a fight delays the next\n"
+                           "raid_chase_max = %d ; by this many hours\n"
                            "\n[improvements]\n",
                            on_off(config.freeze_money), on_off(config.freeze_ore),
                            MUSIC_NAMES[config.music], on_off(config.effects), config.music_volume,
@@ -422,7 +447,9 @@ bool config_save(void)
                            config.adaptive.delay_max, config.adaptive.delay_bonus,
                            config.adaptive.credits_per_unit, config.adaptive.colony_units,
                            on_off(config.adaptive.warn_on_launch), on_off(config.adaptive.warn_intel),
-                           config.adaptive.contract_min, config.adaptive.contract_max) > 0;
+                           config.adaptive.contract_min, config.adaptive.contract_max,
+                           config.adaptive.raid_min, config.adaptive.raid_max, config.adaptive.raid_gap,
+                           config.adaptive.raid_chase_min, config.adaptive.raid_chase_max) > 0;
     for (int i = 0; ok && i < config.improvements.count; i++)
         ok = SDL_IOprintf(io, "%s = %s\n", config.improvements.keys[i],
                           on_off(config.improvements.on[i])) > 0;

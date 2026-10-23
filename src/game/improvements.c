@@ -38,6 +38,9 @@ const SwitchInfo Improvements_List[] = {
     {"planetary_defence", "Planetary defence",
      "Ion cannon and Twin laser battery fight in battles. 1 Ion per body.",
      &improvements.planetary_defence},
+    {"raids", "Raids",
+     "Raids, blockades, scouts. Needs Adaptive threat. Not for DOS saves.",
+     &improvements.raids},
 };
 
 const int Improvements_Count = (int)SDL_arraysize(Improvements_List);
@@ -46,14 +49,15 @@ bool Improvements_NeedsPortSaves(int i)
 {
     return Improvements_List[i].value == &improvements.trade_routes
            || Improvements_List[i].value == &improvements.no_building_limit
-           || Improvements_List[i].value == &improvements.adaptive_threat;
+           || Improvements_List[i].value == &improvements.adaptive_threat
+           || Improvements_List[i].value == &improvements.raids;
 }
 
 bool Improvements_PortSaves(void)
 {
     // A signed contract (game/adaptive.h) outlives the switch.
     return improvements.trade_routes || improvements.no_building_limit || improvements.adaptive_threat
-           || Adaptive_AnyContract();
+           || improvements.raids || Adaptive_AnyContract();
 }
 
 void Improvements_Init(bool scripted)
