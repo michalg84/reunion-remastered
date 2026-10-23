@@ -60,6 +60,9 @@ typedef enum : int {
     R_COLONY_STATS,
     R_DETOXIN_RATE,
     R_LANGUAGE,
+    R_THREAT_LEVEL,
+    R_WARN_LAUNCH,
+    R_WARN_INTEL,
     R_IMPROVEMENTS_ON,
     R_IMPROVEMENTS_OFF,
     R_FIXES_ON,
@@ -273,6 +276,17 @@ static void build_rows(void)
         r = add(ROW_CHOICE, R_LANGUAGE, "Language", "The CD's games. From the next restart (System).");
         SDL_strlcpy(r->value, gamedata_language_label(shown_language()), sizeof r->value);
         r->enabled = (languages() & (languages() - 1)) != 0;  // more than one
+        // The adaptive threat improvement's (game/adaptive.h); the rest of its numbers are [adaptive].
+        static const char *const levels[] = {"Easy", "Normal", "Hard"};
+        r = add(ROW_CHOICE, R_THREAT_LEVEL, "Threat level",
+                "Adaptive threat: how strong the alien waves are against yours. Easy, Normal, Hard.");
+        SDL_strlcpy(r->value, levels[config.adaptive.level], sizeof r->value);
+        r = add(ROW_TOGGLE, R_WARN_LAUNCH, "Wave warning",
+                "Adaptive threat: a message when an alien fleet sets off.");
+        r->on = config.adaptive.warn_on_launch;
+        r = add(ROW_TOGGLE, R_WARN_INTEL, "Early warning",
+                "Adaptive threat: a message 100-200 h before, with an observatory or a contract.");
+        r->on = config.adaptive.warn_intel;
         break;
     case SEC_IMPROVEMENTS:
         add(ROW_ACTION, R_IMPROVEMENTS_ON, "All on", "Changes to the original game's design.");
@@ -460,6 +474,15 @@ static void act(const Row *r, int dir)
         config.language = l;
         break;
     }
+    case R_THREAT_LEVEL:
+        config.adaptive.level = (ConfigLevel)step(config.adaptive.level, dir ? dir : 1, 0, 2, true);
+        break;
+    case R_WARN_LAUNCH:
+        config.adaptive.warn_on_launch = !config.adaptive.warn_on_launch;
+        break;
+    case R_WARN_INTEL:
+        config.adaptive.warn_intel = !config.adaptive.warn_intel;
+        break;
     case R_IMPORT:
         importscreen_run(true);
         vid_set_overlay(menu_draw);

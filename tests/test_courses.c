@@ -260,7 +260,7 @@ static void two_away(void)
     SDL_snprintf(path, sizeof path, "%s/reunion.3", dir);
     size_t size;
     uint8_t *file = SDL_LoadFile(path, &size);
-    CHECK(file && size > 12 && file[8] == 2 && file[9] == 0);
+    CHECK(file && size > 12 && file[8] == 3 && file[9] == 0);
     if (file && size > 12) {
         file[8] = 1;
         CHECK(SDL_SaveFile(path, file, size - 12));  // without the courses' table

@@ -1087,6 +1087,7 @@ void Game_PickPubMenu(void)
 static void pub_dialog_enter(void)
 {
     Game_PickPubMenu();
+    Pub_NoteEntryMenu();  // port improvement (game/adaptive.h)
     Pub_LoadPersonPortrait();
     Pub_BuildQuestionMenu();
     Pub_DrawQuestionMenu();
@@ -1271,10 +1272,14 @@ static void screen_pub_dialog(void)
             // sixth in ItemQty[1] (1fd2:0788), so index the bytes.
             ds.Pub_QuestionLine = ((const int8_t *)&ds.Pub_CurMenu)[ds.Pub_HoverItem];
             ds.Pub_HoverItem = 0;
-            Pub_ReadQuestionCode();
-            ds.Pub_ReplyLine = ds.Pub_QuestionCode;
-            pub_answer();
-            Pub_ShowReply();
+            if (Pub_IsContractItem(ds.Pub_QuestionLine)) {
+                Pub_ContractAnswer(ds.Pub_QuestionLine);  // port improvement (game/adaptive.h)
+            } else {
+                Pub_ReadQuestionCode();
+                ds.Pub_ReplyLine = ds.Pub_QuestionCode;
+                pub_answer();
+                Pub_ShowReply();
+            }
             ds.Pub_Replied = 1;
             ds.Game_HotspotHit = 0;
             ds.Mouse_HeldPhase = 1;

@@ -142,6 +142,12 @@ def report(files, events, charts):
         elif t == "force_dispatch":
             line = (f"{e['name']} force {e['force']} sets off for {site(e)}, {e['travel']} h, "
                     f"{total(e['units'][:4])} ships / {total(e['units'][4:])} ground")
+        elif t == "adaptive":
+            what = {"wait": "wave waits for a weak player (timer %(a)s h, wave %(b)s units vs yours %(c)s)",
+                    "scale": "wave scaled to %(a)s%% (was %(b)s units, yours %(c)s)",
+                    "warn_early": "early warning (%(a)s h before, scale %(a)s%%, yours %(c)s)".replace("%(a)s%%", "%(b)s%%"),
+                    "contract": "contract signed for %(a)s credits"}.get(e["what"], e["what"])
+            line = f"adaptive: **{e['name']}** wave {e['wave']}: " + what % e
         elif t == "research_done":
             line = f"invention {e['invention']} done: {e['name']}"
         elif t in ("session", "time_jump"):

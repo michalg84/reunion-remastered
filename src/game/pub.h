@@ -6,6 +6,7 @@
 // State: the Pub_* fields of DS (game/dseg.h).
 #pragma once
 #include <stdint.h>
+#include <stdbool.h>
 #include "game/dseg.h"
 
 // 1fd2:0000 (near): person idx 1..10.
@@ -24,6 +25,17 @@ void Pub_ReadQuestionCode(void);
 void Pub_ShowReply(void);
 // 1fd2:0788
 void Pub_BuildQuestionMenu(void);
+// Port improvement (game/adaptive.h): the pub person's first menu, set when
+// the talk starts, is the one that offers intelligence contracts, as lines
+// after the person's own questions. Their menu items are from
+// PUB_CONTRACT_ITEM on (plus the race); a click on one goes to
+// Pub_ContractAnswer instead of the question files.
+enum : int16_t { PUB_CONTRACT_ITEM = 100 };
+void Pub_NoteEntryMenu(void);
+// The menu item is a contract offer.
+bool Pub_IsContractItem(int16_t item);
+// Signs the contract if the player can pay; the person's reply is drawn.
+void Pub_ContractAnswer(int16_t item);
 // 1fd2:09ea
 void Pub_DrawQuestionMenu(void);
 // 1fd2:0a8b

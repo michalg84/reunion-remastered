@@ -270,6 +270,28 @@ bool Adaptive_ContractOffered(int16_t race)
     return r->Status != 0 || (r->HomeSystem > 1 && player_there(r->HomeSystem));
 }
 
+int16_t Adaptive_Seller(int16_t race)
+{
+    switch (race) {
+    case 3: case 4: case 5:  // Morgruls, Kalls, Phelonians
+        return 4;
+    case 6: case 7: case 8: case 9: case 10:  // Erans, Lisonians, Undorlings, Hirachi, Druedians
+        return 1;
+    case 11: case 12:  // Syonians, Earthlings
+        return ds.Pub_StoryFlags[1] ? 2 : 0;
+    default:
+        return 0;
+    }
+}
+
+const char *Adaptive_RaceLabel(int16_t race, char *buf, size_t size)
+{
+    race_name(race, buf, size);
+    if (SDL_strncmp(buf, "The ", 4) == 0)
+        SDL_memmove(buf, buf + 4, SDL_strlen(buf + 4) + 1);
+    return buf;
+}
+
 int32_t Adaptive_ContractPrice(int16_t race)
 {
     AdaptiveState *st = &Adaptive_State;

@@ -19,7 +19,9 @@
 #include "game/main_program.h"
 #include "game/message.h"
 #include "game/mouse.h"
+#include "game/pub.h"
 #include "game/saveload.h"
+#include "game/sim.h"
 #include "game/system.h"
 #include "game/textfile.h"
 #include "platform/config.h"
@@ -290,6 +292,115 @@ static void contracts(void)
     CHECK(Adaptive_ContractPrice(5) == 20000);
 }
 
+// The pub person `who` talking, in his first menu.
+static void talk(int16_t who)
+{
+    char digit[2] = {(char)('0' + who % 10), 0};
+    ds.Pub_Person = who;
+    ds.Pub_MenuIdx = 1;
+    ds.Pub_PersonStr.len = 1;
+    ds.Pub_PersonStr.s[0] = digit[0];
+    if (!ds.Pub_Lines)
+        ds.Pub_Lines = game_alloc(0x500);
+    Pub_NoteEntryMenu();
+    Pub_BuildQuestionMenu();
+}
+
+static bool has_item(int16_t item)
+{
+    for (int i = 0; i < ds.Pub_CurMenu.Count; i++)
+        if (((const int8_t *)&ds.Pub_CurMenu)[1 + i] == item)
+            return true;
+    return false;
+}
+
+static void pub(void)
+{
+    reset(true);
+    // Nobody is met: the informer's menu is his own.
+    talk(4);
+    int own = ds.Pub_CurMenu.Count;
+    CHECK(own >= 1 && !has_item(PUB_CONTRACT_ITEM + MORGRULS));
+
+    // Morgruls and Kalls met: the Informer offers both, as the last lines.
+    Intel_Race(MORGRULS)->Status = 2;
+    Intel_Race(KALLS)->Status = 4;
+    talk(4);
+    CHECK(ds.Pub_CurMenu.Count == own + 2);
+    CHECK(has_item(PUB_CONTRACT_ITEM + MORGRULS) && has_item(PUB_CONTRACT_ITEM + KALLS));
+    CHECK(Pub_IsContractItem(PUB_CONTRACT_ITEM + MORGRULS) && !Pub_IsContractItem(5));
+    char price[16];
+    SDL_snprintf(price, sizeof price, "%d", (int)Adaptive_ContractPrice(MORGRULS));
+    CHECK(strstr((char *)ds.Pub_Lines + own * 256, price) && strstr((char *)ds.Pub_Lines + own * 256, "Morgruls"));
+
+    // Others sell the others' only: the spy-hunter nothing for the Morgruls,
+    // the hired spy the Earthlings.
+    talk(1);
+    CHECK(!has_item(PUB_CONTRACT_ITEM + MORGRULS));
+    Intel_Race(12)->Status = 2;
+    talk(2);
+    CHECK(!has_item(PUB_CONTRACT_ITEM + 12));  // not hired
+    ds.Pub_StoryFlags[1] = 1;
+    talk(2);
+    CHECK(has_item(PUB_CONTRACT_ITEM + 12));
+    Intel_Race(7)->Status = 2;
+    talk(1);
+    CHECK(has_item(PUB_CONTRACT_ITEM + 7));
+
+    // Too poor: nothing signed. Then paid, and the line is gone.
+    talk(4);
+    ds.Game_Credits = 100;
+    Pub_ContractAnswer(PUB_CONTRACT_ITEM + MORGRULS);
+    CHECK(!Adaptive_ContractBought(MORGRULS) && ds.Game_Credits == 100 && ds.Pub_MenuIdx == 1);
+    ds.Game_Credits = Adaptive_ContractPrice(MORGRULS);
+    Pub_ContractAnswer(PUB_CONTRACT_ITEM + MORGRULS);
+    CHECK(Adaptive_ContractBought(MORGRULS) && ds.Game_Credits == 0 && ds.Pub_MenuIdx == 1);
+    talk(4);
+    CHECK(!has_item(PUB_CONTRACT_ITEM + MORGRULS) && has_item(PUB_CONTRACT_ITEM + KALLS));
+
+    // Only the first menu of a talk offers them; the switch off, none.
+    ds.Pub_MenuIdx = 2;
+    Pub_BuildQuestionMenu();
+    CHECK(!has_item(PUB_CONTRACT_ITEM + KALLS));
+    improvements.adaptive_threat = false;
+    talk(4);
+    CHECK(ds.Pub_CurMenu.Count == own);
+}
+
+// The story timers of sim.c, an hour at a time: the second Morgrul wave,
+// 600 h after the first one's timer. A weak player: it comes later and
+// smaller; the same game with the switch off: on time and as it was.
+static void story(void)
+{
+    int original = 0, hours_on = 0, hours_off = 0, units_on = 0;
+    for (int on = 0; on <= 1; on++) {
+        reset(on);
+        ds.Intel_MorgrulAttack2Done = 0;
+        ds.Intel_MorgrulAttack2Timer = 600;
+        ds.Intel_MorgrulAttack3Done = 1;
+        ds.Intel_MorgrulAttack1Done = 1;
+        config.adaptive.warn_on_launch = false;
+        TRaceForce *f = Intel_Force(MORGRULS, 2);
+        original = total(f);
+        int h = 0;
+        while (f->Active != 2 && h < 2000) {
+            ds.Game_Hour = (uint8_t)(h % 24);
+            h++;
+            Sim_ProcessStoryTimers();
+        }
+        if (on) {
+            hours_on = h;
+            units_on = total(f);
+        } else {
+            hours_off = h;
+            CHECK(total(f) == original);
+        }
+    }
+    CHECK(hours_off == 600);
+    CHECK(hours_on > 600 && hours_on <= 600 + 240 + 1);
+    CHECK(units_on < original);
+}
+
 static bool save_slot(int16_t slot)
 {
     SaveLoad_ReadSlotNames();
@@ -347,6 +458,8 @@ int main(int argc, char *argv[])
     waiting();
     warnings();
     contracts();
+    pub();
+    story();
     saves();
 
     for (int n = 3; n <= 4; n++) {

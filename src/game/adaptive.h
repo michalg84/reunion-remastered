@@ -26,6 +26,7 @@
 // switch off nothing here changes the game.
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 // The waves, by where they start in sim.c.
@@ -69,6 +70,13 @@ void Adaptive_Dispatched(int wave, int16_t race, int16_t force);
 // home system), alive, not an ally, and has no contract yet.
 bool Adaptive_ContractOffered(int16_t race);
 bool Adaptive_ContractBought(int16_t race);
+// The pub person (Pub_Person, game/pub.h) who sells the contract for the
+// race: the Informer (4) the early races, the Spy-Hunter (1) the League's,
+// the hired spy (2) the rest; 0 for none. The spy only once he trusts the
+// player (Pub_StoryFlags[1]).
+int16_t Adaptive_Seller(int16_t race);
+// The race's name for a sentence: "Morgruls", without the article.
+const char *Adaptive_RaceLabel(int16_t race, char *buf, size_t size);
 // The price, drawn on first asking and the same after.
 int32_t Adaptive_ContractPrice(int16_t race);
 // Pays the price (false if the player can't) and signs.
