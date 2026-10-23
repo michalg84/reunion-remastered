@@ -35,6 +35,9 @@ const SwitchInfo Improvements_List[] = {
     {"adaptive_threat", "Adaptive threat",
      "Alien waves match your strength; warnings. Saves then won't load in DOS.",
      &improvements.adaptive_threat},
+    {"planetary_defence", "Planetary defence",
+     "Ion cannon and Twin laser battery fight in battles. 1 Ion per body.",
+     &improvements.planetary_defence},
 };
 
 const int Improvements_Count = (int)SDL_arraysize(Improvements_List);

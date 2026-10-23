@@ -18,6 +18,7 @@
 #include "game/command.h"
 #include "game/courses.h"
 #include "game/credits.h"
+#include "game/defence.h"
 #include "game/droids.h"
 #include "game/dseg.h"
 #include "game/evlog.h"
@@ -86,9 +87,9 @@ static inline TBuilding *building(int16_t i)
 }
 
 // Surface::BuildingTypes[k].
-static inline TBuildingType *building_type(int16_t k)
+static inline const TBuildingType *building_type(int16_t k)
 {
-    return &ds.Surface_BuildingTypes[k - 1];
+    return Defence_Type(k);
 }
 
 static void add_credits(int32_t d)
@@ -718,7 +719,8 @@ static bool build_again(void)
 {
     return improvements.repeat_build && input_shift()
            && building_type(ds.Surface_SelKind)->Cost <= ds.Game_Credits
-           && ds.Game_BuildingCount < Game_BuildingLimit();
+           && ds.Game_BuildingCount < Game_BuildingLimit()
+           && Defence_CanPlace(ds.Surface_SelKind, CUR_SYS, CUR_PLANET(CUR_SYS), CUR_MOON(CUR_SYS));
 }
 
 // Clicks on the map (hotspot 0x15) with the left button: place, select or
@@ -732,6 +734,11 @@ static void surface_map_click(void)
             && ds.Game_BuildingCount >= Game_BuildingLimit()) {
             // The original refuses the building (Surface_BuildOnCurrentPlanet)
             // and charges it all the same. Port fix: refused, nothing paid.
+            Sound_PlayButtonSfx("x");
+            ds.Mouse_HeldPhase = 1;
+        } else if (ds.Surface_Mode == 2
+                   && !Defence_CanPlace(ds.Surface_SelKind, CUR_SYS, CUR_PLANET(CUR_SYS), CUR_MOON(CUR_SYS))) {
+            // Improvement (game/defence.h): the body has all of this kind it takes.
             Sound_PlayButtonSfx("x");
             ds.Mouse_HeldPhase = 1;
         } else if (ds.Surface_Mode == 2) {
@@ -809,6 +816,9 @@ static bool kind_selectable(int16_t k)
     if (k == 4 && body->Mineable == 0)
         return false;
     if (k == 5 && (body->Mineable == 0 || body->Deposits[0] < 10))
+        return false;
+    if (k > Defence_KindCount()
+        || !Defence_CanPlace(k, CUR_SYS, CUR_PLANET(CUR_SYS), CUR_MOON(CUR_SYS)))
         return false;
     const TBuildingType *bt = building_type(k);
     if (bt->NeedProduct == 0) {
@@ -944,7 +954,7 @@ static void screen_surface(void)
                     ds.Surface_SelKind = (int16_t)ds.Main_I;
         } else {
             int16_t last = (int16_t)(ds.Surface_SelKind + 1);
-            for (ds.Main_I = 0x19; ds.Main_I >= last; ds.Main_I--)
+            for (ds.Main_I = Defence_KindCount(); ds.Main_I >= last; ds.Main_I--)
                 if (kind_selectable((int16_t)ds.Main_I))
                     ds.Surface_SelKind = (int16_t)ds.Main_I;
         }

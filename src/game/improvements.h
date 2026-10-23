@@ -49,6 +49,11 @@ typedef struct Improvements {
     // warnings come before them. Its state is a port record: saves then
     // won't load in DOS.
     bool adaptive_threat;
+    // The Ion cannon fights in the space battles of its planet, and so does
+    // a new building, the Twin laser battery (game/defence.h); one Ion
+    // cannon and one Energy shield to a body. Saves with a battery are in
+    // the port's format.
+    bool planetary_defence;
 } Improvements;
 
 extern Improvements improvements;

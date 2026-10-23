@@ -69,6 +69,9 @@ void Adaptive_Reset(void);
 
 // The player's strength, in tenths of a Hunter.
 int32_t Adaptive_PlayerPower(void);
+// A ship's combat weight in tenths of a Hunter, from its damage per turn
+// (at the 11% chance to hit) and its hit points.
+int32_t Adaptive_ShipWeight(int64_t damage, int32_t hp);
 
 // The story timer of a wave counts down one hour (the place of sim.c's
 // tick()): true when it runs out. With the switch off that is all it does.

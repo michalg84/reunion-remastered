@@ -6,6 +6,7 @@
 
 #include "game/anim.h"
 #include "game/blit.h"
+#include "game/defence.h"
 #include "game/evlog.h"
 #include "game/fixes.h"
 #include "game/gfx.h"
@@ -201,6 +202,15 @@ void SpWar_InitSpaceFleets(void)
                 }
             }
         }
+    }
+
+    // Improvement (game/defence.h): the batteries of this planet fight too.
+    for (int i = 0; i < 2; i++) {
+        const DefenceUnit *u = &Defence_Units[i];
+        int16_t n = Defence_Fighting(u, ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet);
+        for (int16_t a = 0; a < n && (uint16_t)ds.SpWar_AttackerShipCount < 500; a++)
+            add_ship(ds.SpWar_AttackerList, &ds.SpWar_AttackerShipCount, u->id, u->cls, u->dmg,
+                     u->hp, false);
     }
 
     // Buildings (race forces) at this planet.
@@ -520,14 +530,20 @@ static void step_side(uint8_t *own, int16_t ownCount, uint8_t *foe, int16_t *foe
         }
         int16_t t = (int16_t)(System_Random((uint16_t)*foeCount) + 1);
         SpShip *tg = Ship(foe, t);
-        if (System_Random(100) < 11) {
-            if (s->cls < 3 && tg->cls > 2)
+        // Batteries (game/defence.h) fire and are hit by their own rules; every
+        // other ship by the original's.
+        const DefenceUnit *su = Defence_UnitOfId(s->id), *tu = Defence_UnitOfId(tg->id);
+        bool small_shot = s->cls < 3 && !(su && su->large);
+        if (System_Random(100) < (su ? su->hit : 11)) {
+            if (small_shot && tg->cls > 2)
                 tg->hp = (int16_t)(tg->hp - s->dmg / 3);
             else
                 tg->hp = (int16_t)(tg->hp - s->dmg);
-            if (s->cls < 3 && tg->cls < 3) {
+            if (small_shot && tg->cls < 3) {
                 uint16_t r = System_Random(100);
                 int16_t chance = ds.SpWar_KillChance[s->cls - 1][tg->cls - 1];
+                if (tu && System_Random(100) >= tu->kill)
+                    chance = -1;
                 if (chance >= 0 && r <= (uint16_t)chance)
                     tg->hp = 0;
             }
@@ -634,6 +650,18 @@ void SpWar_ApplySpaceLosses(void)
                 ds.SpWar_AttackerLosses[j - 1] += orig - now;
                 sl->Count = (int16_t)now;
             }
+        }
+    }
+
+    // Improvement (game/defence.h): the batteries that fell are demolished.
+    for (int i = 0; i < 2; i++) {
+        const DefenceUnit *u = &Defence_Units[i];
+        int16_t had = Defence_Fighting(u, ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet);
+        int16_t lost = (int16_t)(had - count_alive(ds.SpWar_AttackerList, ds.SpWar_AttackerShipCount,
+                                                   u->id, u->cls));
+        if (lost > 0) {
+            ds.SpWar_AttackerLosses[u->cls - 1] += lost;
+            Defence_Demolish(u, ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet, lost);
         }
     }
 

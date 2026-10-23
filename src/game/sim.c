@@ -15,6 +15,7 @@
 #include "game/colonize.h"
 #include "game/colonystats.h"
 #include "game/courses.h"
+#include "game/defence.h"
 #include "game/droids.h"
 #include "game/dseg.h"
 #include "game/evlog.h"
@@ -864,7 +865,7 @@ void Sim_UpdateBuildings(void)
             if (ds.Game_StaffHired[1] == 3)
                 work = lmul(work, 2);
             uint8_t old = bl->BuildLeft;
-            if (System_Random(ds.Surface_BuildingTypes[bl->Kind - 1].BuildChance) < 10) {
+            if (System_Random(Defence_Type(bl->Kind)->BuildChance) < 10) {
                 if ((int32_t)bl->BuildLeft > work)
                     bl->BuildLeft -= (uint8_t)work;
                 else

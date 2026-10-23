@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 
+#include "game/defence.h"
 #include "game/dseg.h"
 #include "game/evlog.h"
 #include "game/groups.h"
@@ -21,6 +22,11 @@ enum : int {
 
 AdaptiveState Adaptive_State;
 
+// The body every story wave is sent to (Intel_DispatchForce in sim.c). A force
+// has no target of its own before it is dispatched, so the advance warning
+// names this one.
+enum { TARGET_SYSTEM = 1, TARGET_BODY = 5, TARGET_MOON = 0 };
+
 // The bodies of system s (0..7): planets and moons.
 static int bodies(int s)
 {
@@ -38,7 +44,7 @@ void Adaptive_Reset(void)
 // average damage per turn times its hit points (the 11% chance to hit is the
 // same for all and drops out), a Hunter being 11 damage and 800 hit points.
 // Hunter 1, Starfighter 3.9, Destroyer 14.6, Cruiser 33.9.
-static int32_t ship_weight(int64_t damage, int32_t hp)
+int32_t Adaptive_ShipWeight(int64_t damage, int32_t hp)
 {
     if (damage <= 0 || hp <= 0)
         return 0;
@@ -72,12 +78,14 @@ int32_t Adaptive_PlayerPower(void)
             for (int c = 0; c < 4; c++) {
                 const TGroupSlot *ships = &grp->Units[0][c];
                 if (ships->Count > 0)
-                    power += (int64_t)ships->Count * ship_weight(player_ship_damage(ships), ds.SpWar_ClassA[c]);
+                    power += (int64_t)ships->Count * Adaptive_ShipWeight(player_ship_damage(ships), ds.SpWar_ClassA[c]);
                 if (grp->Units[1][c].Count > 0)
                     power += (int64_t)grp->Units[1][c].Count * WEIGHT_GROUND;
             }
         }
     }
+    // The batteries of the planet the waves are sent to.
+    power += Defence_PlanetWeight(TARGET_SYSTEM, TARGET_BODY);
     int32_t colonies = 0;
     for (int s = 0; s < 8; s++)
         for (int i = 0; i < bodies(s); i++)
@@ -95,7 +103,7 @@ static int32_t force_power(const TRaceForce *f)
     int64_t n = 0;
     for (int u = 0; u < 4; u++)
         if (f->Units[u] > 0)
-            n += (int64_t)f->Units[u] * ship_weight(ds.SpWar_ClassB[u], ds.SpWar_ClassA[u]);
+            n += (int64_t)f->Units[u] * Adaptive_ShipWeight(ds.SpWar_ClassB[u], ds.SpWar_ClassA[u]);
     for (int u = 4; u < 8; u++)
         if (f->Units[u] > 0)
             n += (int64_t)f->Units[u] * WEIGHT_GROUND;
@@ -169,11 +177,6 @@ static const char *race_name(int16_t race, char *buf, size_t size)
         *--p = '\0';
     return buf;
 }
-
-// The body every story wave is sent to (Intel_DispatchForce in sim.c). A force
-// has no target of its own before it is dispatched, so the advance warning
-// names this one.
-enum { TARGET_SYSTEM = 1, TARGET_BODY = 5, TARGET_MOON = 0 };
 
 // "Target: <body>" for the waves' destination.
 static void target_line(char *out, size_t size)

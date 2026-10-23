@@ -8,6 +8,7 @@
 #include "game/autosave.h"
 #include "game/blit.h"
 #include "game/courses.h"
+#include "game/defence.h"
 #include "game/gfx.h"
 #include "game/gfxpath.h"
 #include "game/improvements.h"
@@ -269,7 +270,7 @@ static bool transfer(SDL_IOStream *f, uint8_t *name, bool save, bool port)
 bool SaveLoad_PortFormat(void)
 {
     return Improvements_PortSaves() || Routes_Any() || Courses_Any()
-           || ds.Game_BuildingCount > BUILDINGS_DOS;
+           || ds.Game_BuildingCount > BUILDINGS_DOS || Defence_AnyBattery();
 }
 
 bool SaveLoad_Transfer(bool save)

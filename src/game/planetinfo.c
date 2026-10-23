@@ -5,6 +5,7 @@
 
 #include "game/blit.h"
 #include "game/colonystats.h"
+#include "game/defence.h"
 #include "game/gfx.h"
 #include "game/groups.h"
 #include "game/lang.h"
@@ -721,6 +722,8 @@ static TBuilding *building_at(int16_t i)
 // original indexes it all the same (the 63 bytes before the table).
 static const TBuildingType *kind_type(uint8_t kind)
 {
+    if (kind > DEFENCE_DOS_KINDS)
+        return Defence_Type(kind);  // the port's own (game/defence.h)
     return (const TBuildingType *)((const uint8_t *)&ds + offsetof(DSeg, Surface_BuildingTypes)
                                    + (kind - 1) * (int)sizeof(TBuildingType));
 }
