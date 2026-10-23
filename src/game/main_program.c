@@ -7,6 +7,7 @@
 
 #include <SDL3/SDL.h>
 
+#include "game/adaptive.h"
 #include "game/advisor.h"
 #include "game/alientalk.h"
 #include "game/anim.h"
@@ -305,6 +306,7 @@ static void startup(void)
     Autosave_Reset();  // port improvement (game/autosave.h)
     StoreFull_Reset();  // port improvement (game/storefull.h)
     Courses_Reset();  // port improvement (game/courses.h)
+    Adaptive_Reset();  // port improvement (game/adaptive.h)
     if (ds.Game_StartChoice == 2) {
         ds.Game_PrevScreen = 1;
         ds.Game_CurrentScreen = 12;

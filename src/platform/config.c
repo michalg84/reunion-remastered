@@ -16,6 +16,10 @@ static constexpr Config DEFAULTS = {
     .detoxin_rate = true,
     .language = LANGUAGE_ENGLISH,
     .diagnostics = {.hang_seconds = 3, .log_level = CONFIG_LOG_OFF},
+    .adaptive = {.level = CONFIG_LEVEL_NORMAL, .band_low = 80, .band_high = 120, .scale_min = 70,
+                 .scale_max = 120, .delay_max = 40, .delay_bonus = 4, .credits_per_unit = 8000,
+                 .colony_units = 2, .warn_on_launch = true, .warn_intel = true,
+                 .contract_min = 50000, .contract_max = 80000},
 };
 
 Config config = DEFAULTS;
@@ -27,6 +31,7 @@ static ConfigDiagnostics file_diagnostics;
 
 static const char *const MUSIC_NAMES[] = {"setup", "none", "soundblaster", "gus"};
 static const char *const DISPLAY_NAMES[] = {"off", "on", "desktop"};
+static const char *const LEVEL_NAMES[] = {"easy", "normal", "hard"};
 static const char *const LOG_LEVEL_NAMES[] = {"off", "error", "warn", "info", "debug"};
 
 const char *config_log_level_name(ConfigLogLevel level)
@@ -241,6 +246,32 @@ static void set_value(const char *section, const char *key, const char *v)
                    (int)SDL_arraysize(LOG_LEVEL_NAMES));
     else if (IS("diagnostics", "event_log") && parse_bool(v, &b))
         config.diagnostics.event_log = b;
+    else if (IS("adaptive", "level"))
+        parse_name(v, (int *)&config.adaptive.level, LEVEL_NAMES, (int)SDL_arraysize(LEVEL_NAMES));
+    else if (IS("adaptive", "band_low"))
+        parse_int(v, &config.adaptive.band_low, 10, 1000);
+    else if (IS("adaptive", "band_high"))
+        parse_int(v, &config.adaptive.band_high, 10, 1000);
+    else if (IS("adaptive", "scale_min"))
+        parse_int(v, &config.adaptive.scale_min, 10, 300);
+    else if (IS("adaptive", "scale_max"))
+        parse_int(v, &config.adaptive.scale_max, 10, 300);
+    else if (IS("adaptive", "delay_max"))
+        parse_int(v, &config.adaptive.delay_max, 0, 200);
+    else if (IS("adaptive", "delay_bonus"))
+        parse_int(v, &config.adaptive.delay_bonus, 0, 50);
+    else if (IS("adaptive", "credits_per_unit"))
+        parse_int(v, &config.adaptive.credits_per_unit, 100, 1000000);
+    else if (IS("adaptive", "colony_units"))
+        parse_int(v, &config.adaptive.colony_units, 0, 100);
+    else if (IS("adaptive", "warn_on_launch") && parse_bool(v, &b))
+        config.adaptive.warn_on_launch = b;
+    else if (IS("adaptive", "warn_intel") && parse_bool(v, &b))
+        config.adaptive.warn_intel = b;
+    else if (IS("adaptive", "contract_min"))
+        parse_int(v, &config.adaptive.contract_min, 0, 10000000);
+    else if (IS("adaptive", "contract_max"))
+        parse_int(v, &config.adaptive.contract_max, 0, 10000000);
 #undef IS
 }
 
@@ -361,6 +392,20 @@ bool config_save(void)
                            "hang_seconds = %d\n"
                            "log_level = %s ; off | error | warn | info | debug\n"
                            "event_log = %s\n"
+                           "\n[adaptive] ; the adaptive threat improvement (percentages of the original's)\n"
+                           "level = %s ; easy | normal | hard\n"
+                           "band_low = %d ; wave / player strength aimed for at Normal, in %%\n"
+                           "band_high = %d\n"
+                           "scale_min = %d ; a wave's strength never below this %% of the original's\n"
+                           "scale_max = %d ; ... never above (before the bonus for waiting)\n"
+                           "delay_max = %d ; a wave may wait this %% of its interval for a weak player\n"
+                           "delay_bonus = %d ; %% of strength it gains per 100 h waited\n"
+                           "credits_per_unit = %d ; credits that count as one unit of strength\n"
+                           "colony_units = %d ; units of strength one colony counts as\n"
+                           "warn_on_launch = %s ; a message when a wave sets off\n"
+                           "warn_intel = %s ; a message 100-200 h before it, with an observatory\n"
+                           "contract_min = %d ; an intelligence contract costs between these,\n"
+                           "contract_max = %d ; drawn once per race\n"
                            "\n[improvements]\n",
                            on_off(config.freeze_money), on_off(config.freeze_ore),
                            MUSIC_NAMES[config.music], on_off(config.effects), config.music_volume,
@@ -371,7 +416,13 @@ bool config_save(void)
                            on_off(config.detoxin_rate),
                            gamedata_language_name(config.language), on_off(diag->crash_dumps),
                            on_off(diag->hang_watchdog), diag->hang_seconds,
-                           LOG_LEVEL_NAMES[diag->log_level], on_off(diag->event_log)) > 0;
+                           LOG_LEVEL_NAMES[diag->log_level], on_off(diag->event_log), LEVEL_NAMES[config.adaptive.level],
+                           config.adaptive.band_low, config.adaptive.band_high,
+                           config.adaptive.scale_min, config.adaptive.scale_max,
+                           config.adaptive.delay_max, config.adaptive.delay_bonus,
+                           config.adaptive.credits_per_unit, config.adaptive.colony_units,
+                           on_off(config.adaptive.warn_on_launch), on_off(config.adaptive.warn_intel),
+                           config.adaptive.contract_min, config.adaptive.contract_max) > 0;
     for (int i = 0; ok && i < config.improvements.count; i++)
         ok = SDL_IOprintf(io, "%s = %s\n", config.improvements.keys[i],
                           on_off(config.improvements.on[i])) > 0;

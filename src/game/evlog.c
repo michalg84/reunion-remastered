@@ -603,3 +603,20 @@ void EvLog_Init(void)
     session_written = false;
     prev.valid = false;
 }
+
+void EvLog_Adaptive(const char *what, int wave, int16_t race, int a, int b, int c)
+{
+    if (!EvLog_On())
+        return;
+    Json *j = begin("adaptive");
+    j_str(j, "what", what);
+    j_int(j, "wave", wave);
+    j_int(j, "race", race);
+    char name[32];
+    race_name(name, sizeof name, race);
+    j_str(j, "name", name);
+    j_int(j, "a", a);
+    j_int(j, "b", b);
+    j_int(j, "c", c);
+    end(j);
+}

@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include <string.h>
 
+#include "game/adaptive.h"
 #include "game/anim.h"
 #include "game/autosave.h"
 #include "game/blit.h"
@@ -106,7 +107,7 @@ static SlotFormat slot_format[AUTOSAVE_SLOT + 1];
 // The port's format: a header, then the DOS blocks with the building table
 // cut to its count, then the routes and, from version 2, the courses.
 static const uint8_t PORT_MAGIC[8] = {'R', 'E', 'U', 'N', 'I', 'O', 'N', 0x1A};
-enum : uint16_t { PORT_VERSION = 2 };
+enum : uint16_t { PORT_VERSION = 3 };
 
 // --- The block list -----------------------------------------------------------
 
@@ -192,16 +193,24 @@ static bool records(SDL_IOStream *f, void *table, uint16_t count, uint16_t size,
 }
 
 // The port's format has its records after the blocks: the routes'
-// (game/routes.h), then from version 2 the courses' (game/courses.h).
+// (game/routes.h), then from version 2 the courses' (game/courses.h), from
+// version 3 the adaptive threat's (game/adaptive.h).
 static bool port_records(SDL_IOStream *f, uint16_t version, bool save)
 {
     if (!records(f, Routes_Table, ROUTE_SLOTS, sizeof(Route), save))
         return false;
     if (version < 2) {
         Courses_Reset();
+        Adaptive_Reset();
         return true;
     }
-    return records(f, Courses_Extra, COURSE_KINDS, sizeof(Course), save);
+    if (!records(f, Courses_Extra, COURSE_KINDS, sizeof(Course), save))
+        return false;
+    if (version < 3) {
+        Adaptive_Reset();
+        return true;
+    }
+    return records(f, &Adaptive_State, 1, sizeof(AdaptiveState), save);
 }
 
 // The slot name as string[19] (the first 20 bytes of the string[20] at
@@ -245,6 +254,7 @@ static bool transfer(SDL_IOStream *f, uint8_t *name, bool save, bool port)
     else if (ok && !save) {
         Routes_Reset();
         Courses_Reset();
+        Adaptive_Reset();
     }
     // Port addition: frozen cheats (game/options.h) hold the loaded stocks.
     // Saves of earlier port versions may end in a cheats trailer; it is

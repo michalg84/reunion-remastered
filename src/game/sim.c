@@ -9,6 +9,7 @@
 #include <SDL3/SDL.h>
 #include <string.h>
 
+#include "game/adaptive.h"
 #include "game/blit.h"
 #include "game/cargo.h"
 #include "game/colonize.h"
@@ -1525,8 +1526,10 @@ void Sim_ProcessStoryTimers(void)
         ds.Intel_Race2Done4 = 1;
         ds.Game_StoryStage = 2;
     }
-    if (ds.Intel_MorgrulAttack1Done == 0 && tick(&ds.Intel_MorgrulAttack1Timer)) {
+    if (ds.Intel_MorgrulAttack1Done == 0
+        && Adaptive_Tick(WAVE_MORGRUL1, &ds.Intel_MorgrulAttack1Timer, 3, 1)) {
         Intel_DispatchForce(3, 1, 1, 5, 0, 2);
+        Adaptive_Dispatched(WAVE_MORGRUL1, 3, 1);
         ds.Intel_MorgrulAttack1Done = 1;
     }
     if (ds.Intel_Invention14Revealed == 0 && ds.Intel_Invention14Timer > 0 && product(14)->State > 0
@@ -1535,8 +1538,10 @@ void Sim_ProcessStoryTimers(void)
         Message_ShowMessageLine(0x1E);
         ds.Intel_Invention14Revealed = 1;
     }
-    if (ds.Intel_MorgrulAttack2Done == 0 && tick(&ds.Intel_MorgrulAttack2Timer)) {
+    if (ds.Intel_MorgrulAttack2Done == 0
+        && Adaptive_Tick(WAVE_MORGRUL2, &ds.Intel_MorgrulAttack2Timer, 3, 2)) {
         Intel_DispatchForce(3, 2, 1, 5, 0, 2);
+        Adaptive_Dispatched(WAVE_MORGRUL2, 3, 2);
         ds.Intel_MorgrulAttack2Done = 1;
         ds.Intel_MorgrulAttack2Open = 1;
         if (ds.Intel_MorgrulAttack3Done == 0)
@@ -1550,8 +1555,10 @@ void Sim_ProcessStoryTimers(void)
         ds.Intel_Phoenix1Done = 1;
         ds.Intel_Phoenix1Armed = 1;
     }
-    if (ds.Intel_MorgrulAttack3Done == 0 && tick(&ds.Intel_MorgrulAttack3Timer)) {
+    if (ds.Intel_MorgrulAttack3Done == 0
+        && Adaptive_Tick(WAVE_MORGRUL3, &ds.Intel_MorgrulAttack3Timer, 3, 3)) {
         Intel_DispatchForce(3, 3, 1, 5, 0, 2);
+        Adaptive_Dispatched(WAVE_MORGRUL3, 3, 3);
         ds.Intel_MorgrulAttack3Done = 1;
         ds.Intel_MorgrulAttack3Open = 1;
         if (ds.Intel_Msg14Done == 0)
@@ -1575,10 +1582,12 @@ void Sim_ProcessStoryTimers(void)
         Message_ShowMessageLine(0x18);
         Intel_EliminateRace(5);
     }
-    if (ds.Intel_JointAttackDone == 0 && tick(&ds.Intel_JointAttackTimer)) {
+    if (ds.Intel_JointAttackDone == 0 && Adaptive_Tick(WAVE_JOINT, &ds.Intel_JointAttackTimer, 3, 4)) {
         ds.Intel_JointAttackDone = 1;
         Intel_DispatchForce(3, 4, 1, 5, 0, 2);
+        Adaptive_Dispatched(WAVE_JOINT, 3, 4);
         Intel_DispatchForce(4, 2, 1, 5, 0, 2);
+        Adaptive_Dispatched(WAVE_LAUNCH, 4, 2);
     }
     if (ds.Intel_Race5Done == 0 && ds.Intel_Race5Timer > 0 && ds.Races_Races[3].Status > 2
         && --ds.Intel_Race5Timer == 0) {
@@ -1610,13 +1619,17 @@ void Sim_ProcessStoryTimers(void)
     }
     if (ds.Intel_Race7to10Done == 0 && tick(&ds.Intel_Race7to10Timer)) {
         Intel_DispatchForce(7, 1, 1, 5, 0, 2);
+        Adaptive_Dispatched(WAVE_LAUNCH, 7, 1);
         ds.Intel_Race7to10Done = 1;
         Intel_ScheduleForceLaunch(8, 1, (int16_t)(System_Random(500) + 1000), 2);
     }
     if (tick(&ds.Intel_LaunchTimer)) {
         if (race(ds.Intel_LaunchRace)->Status == 2)
+        {
             Intel_DispatchForceNow(ds.Intel_LaunchRace, ds.Intel_LaunchForce, 1, 5, 0, 2,
                                    ds.Intel_LaunchMission);
+            Adaptive_Dispatched(WAVE_LAUNCH, ds.Intel_LaunchRace, ds.Intel_LaunchForce);
+        }
         ds.Intel_LaunchTimer = 0;
         if (ds.Intel_LaunchRace == 3 && ds.Intel_LaunchForce == 6)
             Intel_ScheduleForceLaunch(3, 7, (int16_t)(System_Random(100) + 0x1194), 2);

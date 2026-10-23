@@ -20,7 +20,8 @@
 // BUILDINGS_MAX, game/main_program.h; the DOS format can't hold more than
 // 1,000: the original would read past its table into the charset), then
 // the port's tables, each as its count and record size, then the records:
-// the routes and, from version 2, the courses (version 1 has none). Writing a
+// the routes, from version 2 the courses and from version 3 the adaptive
+// threat's state (an older version has none). Writing a
 // slot in one format deletes its file in the other. The disk screen lists
 // both and loads either, whatever the switches say; a version newer than
 // the port knows is listed but refused.

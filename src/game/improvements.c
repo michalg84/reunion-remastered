@@ -31,6 +31,9 @@ const SwitchInfo Improvements_List[] = {
     {"university_courses", "Universities count",
      "Courses need a University; one staff member away per University.",
      &improvements.university_courses},
+    {"adaptive_threat", "Adaptive threat",
+     "Alien waves match your strength; warnings. Saves then won't load in DOS.",
+     &improvements.adaptive_threat},
 };
 
 const int Improvements_Count = (int)SDL_arraysize(Improvements_List);
@@ -38,12 +41,13 @@ const int Improvements_Count = (int)SDL_arraysize(Improvements_List);
 bool Improvements_NeedsPortSaves(int i)
 {
     return Improvements_List[i].value == &improvements.trade_routes
-           || Improvements_List[i].value == &improvements.no_building_limit;
+           || Improvements_List[i].value == &improvements.no_building_limit
+           || Improvements_List[i].value == &improvements.adaptive_threat;
 }
 
 bool Improvements_PortSaves(void)
 {
-    return improvements.trade_routes || improvements.no_building_limit;
+    return improvements.trade_routes || improvements.no_building_limit || improvements.adaptive_threat;
 }
 
 void Improvements_Init(bool scripted)

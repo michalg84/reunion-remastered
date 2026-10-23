@@ -44,6 +44,11 @@ typedef struct Improvements {
     // A university course needs a finished, powered University, and with N
     // of them up to N staff can be away at once (game/courses.h).
     bool university_courses;
+    // The alien waves follow the player's strength (game/adaptive.h): they
+    // wait, within limits, for a weak player and are scaled to match, and
+    // warnings come before them. Its state is a port record: saves then
+    // won't load in DOS.
+    bool adaptive_threat;
 } Improvements;
 
 extern Improvements improvements;
