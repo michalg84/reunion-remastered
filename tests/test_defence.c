@@ -509,6 +509,24 @@ static void losses(void)
     CHECK(Defence_Count(DEFENCE_KIND_TWIN, 1, 5, -1, false) == 0);
     CHECK(ds.SpWar_AttackerLosses[1] == 10);
 
+    // A fleet of 500 takes no battery; none of them is lost with it.
+    reset(true);
+    TGroup *g = Groups_At(0, 1);
+    memset(g, 0, sizeof *g);
+    g->Kind = 1;
+    g->System = 1;
+    g->Planet = 5;
+    g->Status = 1;
+    g->Units[0][0].Count = 500;
+    g->Units[0][0].Weapons[0] = 500;
+    ds.Game_GroupCount = 1;
+    add_building(DEFENCE_KIND_TWIN, 1, 5, 0, true, true);
+    SpWar_InitSpaceFleets();
+    CHECK(ds.SpWar_AttackerShipCount == 500 && count_id(DEFENCE_ID_TWIN) == 0);
+    ds.SpWar_AttackerShipCount = 0;
+    SpWar_ApplySpaceLosses();
+    CHECK(Defence_Count(DEFENCE_KIND_TWIN, 1, 5, -1, false) == 1);
+
     // The switch off: no battery in the battle, none lost.
     reset(true);
     add_building(DEFENCE_KIND_TWIN, 1, 5, 0, true, true);

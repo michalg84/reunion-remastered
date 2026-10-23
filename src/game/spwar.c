@@ -660,7 +660,9 @@ void SpWar_ApplySpaceLosses(void)
     // Improvement (game/defence.h): the batteries that fell are demolished.
     for (int i = 0; i < 2; i++) {
         const DefenceUnit *u = &Defence_Units[i];
-        int16_t had = Defence_Fighting(u, ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet);
+        // Those that joined (a full fleet takes no more), not all that stand.
+        int16_t joined = (int16_t)count_alive(ds.SpWar_AttackerList, ds.SpWar_AttackerStart, u->id, u->cls);
+        int16_t had = SDL_min(joined, Defence_Fighting(u, ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet));
         int16_t lost = (int16_t)(had - count_alive(ds.SpWar_AttackerList, ds.SpWar_AttackerShipCount,
                                                    u->id, u->cls));
         if (lost > 0) {
