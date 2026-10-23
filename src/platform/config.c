@@ -20,7 +20,7 @@ static constexpr Config DEFAULTS = {
                  .scale_max = 120, .delay_max = 40, .delay_bonus = 4, .credits_per_unit = 5000,
                  .colony_units = 3, .warn_on_launch = true, .warn_intel = true,
                  .contract_min = 50000, .contract_max = 80000, .raid_min = 800, .raid_max = 1200,
-                 .raid_gap = 200, .raid_chase_min = 100, .raid_chase_max = 200},
+                 .raid_gap = 200, .raid_chase_min = 100, .raid_chase_max = 200, .blockade_max = 720},
 };
 
 Config config = DEFAULTS;
@@ -292,6 +292,8 @@ static void set_value(const char *section, const char *key, const char *v)
         parse_int(v, &config.adaptive.raid_chase_min, 0, 5000);
     else if (IS("adaptive", "raid_chase_max"))
         parse_int(v, &config.adaptive.raid_chase_max, 0, 5000);
+    else if (IS("adaptive", "blockade_max"))
+        parse_int(v, &config.adaptive.blockade_max, 1, 20000);
 #undef IS
 }
 
@@ -431,6 +433,7 @@ bool config_save(void)
                            "raid_gap = %d ; no raid this near a story wave, hours\n"
                            "raid_chase_min = %d ; a raid chased off without a fight delays the next\n"
                            "raid_chase_max = %d ; by this many hours\n"
+                           "blockade_max = %d ; a blockade nobody breaks is lifted after this many hours\n"
                            "\n[improvements]\n",
                            on_off(config.freeze_money), on_off(config.freeze_ore),
                            MUSIC_NAMES[config.music], on_off(config.effects), config.music_volume,
@@ -449,7 +452,7 @@ bool config_save(void)
                            on_off(config.adaptive.warn_on_launch), on_off(config.adaptive.warn_intel),
                            config.adaptive.contract_min, config.adaptive.contract_max,
                            config.adaptive.raid_min, config.adaptive.raid_max, config.adaptive.raid_gap,
-                           config.adaptive.raid_chase_min, config.adaptive.raid_chase_max) > 0;
+                           config.adaptive.raid_chase_min, config.adaptive.raid_chase_max, config.adaptive.blockade_max) > 0;
     for (int i = 0; ok && i < config.improvements.count; i++)
         ok = SDL_IOprintf(io, "%s = %s\n", config.improvements.keys[i],
                           on_off(config.improvements.on[i])) > 0;

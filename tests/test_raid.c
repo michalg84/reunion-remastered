@@ -557,6 +557,20 @@ static void blockade(void)
     CHECK(!Raid_Blockaded(1, 3, 0));
     improvements.raids = true;
 
+    // Nobody comes: after blockade_max hours it is lifted.
+    {
+        CHECK(f->clock == config.adaptive.blockade_max);
+        f->clock = 300;
+        hours(299);
+        CHECK(Raid_Blockaded(1, 3, 0));
+        hours(2);
+        CHECK(!Raid_Blockaded(1, 3, 0) && Raid_State.fleet[0].phase == RAID_PHASE_NONE);
+    }
+    reset(true);
+    b = colony(1, 3, 0);
+    arrive_at(RAID_BLOCKADE, 1, 3, 0, 5, 0);
+    hours(1);
+
     // It stays for days; a player with ships there and enough of them chases it.
     hours(200);
     CHECK(Raid_State.fleet[0].phase == RAID_PHASE_STAYING);

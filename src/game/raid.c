@@ -582,6 +582,7 @@ static bool confront(int slot)
         if (f->mission == RAID_BLOCKADE) {
             if (f->phase != RAID_PHASE_STAYING) {
                 f->phase = RAID_PHASE_STAYING;
+                f->clock = (uint16_t)SDL_clamp(config.adaptive.blockade_max, 1, 60000);
                 announce("BLOCKADE", f, "No ore will move there");
                 EvLog_Raid("blockade", "hold", f->race, f->system, f->planet, f->moon, f->units[0], f->units[1], 0, 0);
             }
@@ -648,6 +649,18 @@ static void fleet_hour(int slot)
             scout_hour(slot);
         else if (defence_of(f) > 0 || !target_is_ours(f->system, f->planet, f->moon))
             confront(slot);
+        else if (f->clock > 0 && --f->clock == 0) {
+            // Nobody came for it: the blockade is lifted, the next mission waits a while.
+            RaidState *st = &Raid_State;
+            int span = config.adaptive.raid_chase_max - config.adaptive.raid_chase_min;
+            int delay = config.adaptive.raid_chase_min + System_Random((uint16_t)SDL_max(span + 1, 1));
+            if (slot == 0) {
+                st->timer = (uint16_t)SDL_clamp(delay, 1, 60000);
+                st->plan_mission = RAID_NONE;
+                st->warned = 1;
+            }
+            leave(slot, "lift");
+        }
         break;
     default:
         break;

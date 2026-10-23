@@ -71,6 +71,7 @@ typedef struct ConfigAdaptive {
     int raid_gap;          // no raid this near a story wave, hours
     int raid_chase_min;    // a raid chased off without a fight delays the next by this
     int raid_chase_max;
+    int blockade_max;      // a blockade nobody breaks is lifted after this many hours
 } ConfigAdaptive;
 
 enum : int {
