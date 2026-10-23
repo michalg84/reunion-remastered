@@ -1585,9 +1585,8 @@ void Sim_ProcessStoryTimers(void)
     if (ds.Intel_JointAttackDone == 0 && Adaptive_Tick(WAVE_JOINT, &ds.Intel_JointAttackTimer, 3, 4)) {
         ds.Intel_JointAttackDone = 1;
         Intel_DispatchForce(3, 4, 1, 5, 0, 2);
-        Adaptive_Dispatched(WAVE_JOINT, 3, 4);
         Intel_DispatchForce(4, 2, 1, 5, 0, 2);
-        Adaptive_Dispatched(WAVE_LAUNCH, 4, 2);
+        Adaptive_Dispatched(WAVE_JOINT, 3, 4);  // both forces, as one wave
     }
     if (ds.Intel_Race5Done == 0 && ds.Intel_Race5Timer > 0 && ds.Races_Races[3].Status > 2
         && --ds.Intel_Race5Timer == 0) {
@@ -1617,15 +1616,14 @@ void Sim_ProcessStoryTimers(void)
         AlienTalk_StartAlienScene(7);
         Intel_AnnihilateSystem4();
     }
-    if (ds.Intel_Race7to10Done == 0 && tick(&ds.Intel_Race7to10Timer)) {
+    if (ds.Intel_Race7to10Done == 0 && Adaptive_Tick(WAVE_RACE7, &ds.Intel_Race7to10Timer, 7, 1)) {
         Intel_DispatchForce(7, 1, 1, 5, 0, 2);
-        Adaptive_Dispatched(WAVE_LAUNCH, 7, 1);
+        Adaptive_Dispatched(WAVE_RACE7, 7, 1);
         ds.Intel_Race7to10Done = 1;
         Intel_ScheduleForceLaunch(8, 1, (int16_t)(System_Random(500) + 1000), 2);
     }
-    if (tick(&ds.Intel_LaunchTimer)) {
-        if (race(ds.Intel_LaunchRace)->Status == 2)
-        {
+    if (Adaptive_Tick(WAVE_LAUNCH, &ds.Intel_LaunchTimer, ds.Intel_LaunchRace, ds.Intel_LaunchForce)) {
+        if (race(ds.Intel_LaunchRace)->Status == 2) {
             Intel_DispatchForceNow(ds.Intel_LaunchRace, ds.Intel_LaunchForce, 1, 5, 0, 2,
                                    ds.Intel_LaunchMission);
             Adaptive_Dispatched(WAVE_LAUNCH, ds.Intel_LaunchRace, ds.Intel_LaunchForce);

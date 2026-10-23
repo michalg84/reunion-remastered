@@ -285,7 +285,7 @@ static void build_rows(void)
                 "Adaptive threat: a message when an alien fleet sets off.");
         r->on = config.adaptive.warn_on_launch;
         r = add(ROW_TOGGLE, R_WARN_INTEL, "Early warning",
-                "Adaptive threat: a message 100-200 h before, with an observatory or a contract.");
+                "Adaptive threat: a message 100-200 h before, with an observatory or satellite at their home (a contract warns always).");
         r->on = config.adaptive.warn_intel;
         break;
     case SEC_IMPROVEMENTS:

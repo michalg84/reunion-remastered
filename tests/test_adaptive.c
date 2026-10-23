@@ -1,5 +1,5 @@
 // Improvement (game/improvements.h, adaptive_threat): game/adaptive.h. The
-// player's strength; a wave scaled into the band (never below scale_min or
+// player's strength (a combat weight); a wave scaled into the band (never below scale_min or
 // above scale_max, more for waiting); a wave waiting at half speed for a
 // weak player, for at most delay_max of its interval; the launch message
 // and the advance warning (a contract, or an observatory in the race's home
@@ -13,6 +13,7 @@
 #include "game/adaptive.h"
 #include "game/dseg.h"
 #include "game/gfx.h"
+#include "game/groups.h"
 #include "game/improvements.h"
 #include "game/intel.h"
 #include "game/lang.h"
@@ -89,7 +90,7 @@ static void power_and_scale(void)
     reset(true);
     int32_t base = Adaptive_PlayerPower();
     ds.Game_Credits = 80000;
-    CHECK(Adaptive_PlayerPower() == base + 10);  // credits_per_unit 8000
+    CHECK(Adaptive_PlayerPower() == base + 10 * 80000 / config.adaptive.credits_per_unit);
 
     // A player with nothing against a wave of 40: the wave is lowered to
     // the least it may be, 70%.
@@ -99,14 +100,14 @@ static void power_and_scale(void)
     CHECK(f->Units[0] == 21 && f->Units[4] == 7);
 
     // A rich player (ratio under the band): raised to the most, 120%.
-    ds.Game_Credits = 8000 * 400;
+    ds.Game_Credits = config.adaptive.credits_per_unit * 400;
     f = wave(MORGRULS, 2, 30, 10);
     Adaptive_Dispatched(WAVE_MORGRUL2, MORGRULS, 2);
     CHECK(f->Units[0] == 36 && f->Units[4] == 12);
 
     // A player in the band leaves it as it is: 40 against 40 + 2 colonies.
-    ds.Game_Credits = 8000 * (40 - 2 * config.adaptive.colony_units);
-    int32_t p = Adaptive_PlayerPower();
+    ds.Game_Credits = config.adaptive.credits_per_unit * 30;
+    int32_t p = Adaptive_PlayerPower() / WEIGHT_GROUND;  // in Hunters
     f = wave(MORGRULS, 2, (int16_t)(p * 3 / 4), (int16_t)(p / 4));
     int before = total(f);
     Adaptive_Dispatched(WAVE_MORGRUL2, MORGRULS, 2);
@@ -114,7 +115,7 @@ static void power_and_scale(void)
 
     // Easy lowers the band: the same waves come out weaker.
     config.adaptive.level = CONFIG_LEVEL_EASY;
-    ds.Game_Credits = 8000 * 200;
+    ds.Game_Credits = config.adaptive.credits_per_unit * 200;
     f = wave(MORGRULS, 2, 40, 0);
     Adaptive_Dispatched(WAVE_MORGRUL2, MORGRULS, 2);
     int easy = total(f);
@@ -131,6 +132,51 @@ static void power_and_scale(void)
     Adaptive_Dispatched(WAVE_MORGRUL2, MORGRULS, 2);
     CHECK(f->Units[0] == 78);  // 70% + 8%
     CHECK(Adaptive_State.waited[WAVE_MORGRUL2] == 0);
+}
+
+// A ship weighs by damage and hit points, not by number: a Starfighter is
+// about four Hunters, so a wave of Starfighters is scaled down where as many
+// Hunters are not.
+static void weights(void)
+{
+    reset(true);
+    ds.Game_Credits = config.adaptive.credits_per_unit * 1000;
+    TRaceForce *h = wave(MORGRULS, 2, 200, 0);
+    Adaptive_Dispatched(WAVE_MORGRUL2, MORGRULS, 2);
+    CHECK(h->Units[0] == 240);  // under the band: raised to the most, 120%
+    TRaceForce *sf = wave(MORGRULS, 2, 0, 0);
+    sf->Units[1] = 200;
+    Adaptive_Dispatched(WAVE_MORGRUL2, MORGRULS, 2);
+    CHECK(sf->Units[1] > 150 && sf->Units[1] < 240);  // 200 SF weigh ~780 of ~1000: nearly the band
+
+    // The player's own ships weigh by their weapons: more guns, more weight.
+    reset(true);
+    TGroup *g = Groups_At(0, 1);
+    memset(g->Units, 0, sizeof g->Units);
+    g->Kind = 1;
+    ds.Game_GroupCount = 1;
+    ds.Game_PlanetForceCount = 0;
+    ds.Game_StaffExp[2] = 1;
+    g->Units[0][0].Count = 10;
+    g->Units[0][0].Weapons[0] = 20;  // two Lasers each
+    int32_t light = Adaptive_PlayerPower();
+    g->Units[0][0].Weapons[1] = 10;  // and a Twin laser each
+    CHECK(Adaptive_PlayerPower() > light);
+}
+
+// The joint attack's two forces are one wave: the scale follows their sum.
+static void joint(void)
+{
+    reset(true);
+    int32_t base = Adaptive_PlayerPower();
+    ds.Game_Credits = (int32_t)((1000 - base) * (int64_t)config.adaptive.credits_per_unit / WEIGHT_GROUND);
+    TRaceForce *m = wave(MORGRULS, 4, 0, 100);
+    TRaceForce *k = wave(KALLS, 2, 0, 100);
+    int32_t p = Adaptive_PlayerPower();
+    CHECK(p >= 990 && p <= 1010);  // each force alone is in the band
+    config.adaptive.warn_on_launch = false;
+    Adaptive_Dispatched(WAVE_JOINT, MORGRULS, 4);
+    CHECK(m->Units[4] == 70 && k->Units[4] == 70);  // together at twice the band: the least, 70%
 }
 
 static void switch_off(void)
@@ -173,7 +219,7 @@ static void waiting(void)
 
     // A strong one: the wave comes on time.
     reset(true);
-    ds.Game_Credits = 8000 * 1000;
+    ds.Game_Credits = config.adaptive.credits_per_unit * 1000;
     wave(MORGRULS, 2, 100, 50);
     CHECK(run(WAVE_MORGRUL2, 1000, MORGRULS, 2) == 1000);
 
@@ -240,6 +286,60 @@ static void warnings(void)
     Adaptive_State.contract[MORGRULS] = 1;
     run(WAVE_MORGRUL2, 500, MORGRULS, 2);
     CHECK(ds.Message_LogCount == per);
+}
+
+// The advance warning for the other launches: the scheduled one (when the
+// race is an enemy), the League's first, and the joint attack's Kalls.
+static void launches(void)
+{
+    // The scheduled launch of the Lisonians: a contract warns, once.
+    reset(true);
+    config.adaptive.warn_on_launch = false;
+    Intel_Race(7)->Status = 2;
+    wave(7, 1, 30, 10);
+    Adaptive_State.contract[7] = 1;
+    int16_t timer = 500;
+    int logged = 0;
+    for (int h = 1; h <= 450; h++) {
+        ds.Game_Hour = (uint8_t)(h % 24);
+        Adaptive_Tick(WAVE_LAUNCH, &timer, 7, 1);
+    }
+    logged = ds.Message_LogCount;
+    CHECK(logged > 0 && logged <= 6);
+
+    // Not an enemy any more: the launch won't happen, nothing is announced.
+    reset(true);
+    config.adaptive.warn_on_launch = false;
+    Intel_Race(7)->Status = 6;
+    wave(7, 1, 30, 10);
+    Adaptive_State.contract[7] = 1;
+    timer = 500;
+    for (int h = 1; h <= 450; h++)
+        Adaptive_Tick(WAVE_LAUNCH, &timer, 7, 1);
+    CHECK(ds.Message_LogCount == 0);
+
+    // The League's first force has a slot of its own.
+    reset(true);
+    config.adaptive.warn_on_launch = false;
+    wave(7, 1, 30, 10);
+    Adaptive_State.contract[7] = 1;
+    timer = 500;
+    for (int h = 1; h <= 450; h++)
+        Adaptive_Tick(WAVE_RACE7, &timer, 7, 1);
+    CHECK(ds.Message_LogCount > 0);
+    CHECK(Adaptive_State.warned[WAVE_RACE7] == 1 && !Adaptive_State.warned[WAVE_LAUNCH]);
+
+    // The joint attack: a contract with the Kalls alone warns of both.
+    reset(true);
+    config.adaptive.warn_on_launch = false;
+    config.adaptive.delay_max = 0;
+    wave(MORGRULS, 4, 30, 10);
+    wave(KALLS, 2, 30, 10);
+    Adaptive_State.contract[KALLS] = 1;
+    timer = 500;
+    for (int h = 1; h <= 450; h++)
+        Adaptive_Tick(WAVE_JOINT, &timer, MORGRULS, 4);
+    CHECK(ds.Message_LogCount > 0);
 }
 
 static void contracts(void)
@@ -333,16 +433,20 @@ static void pub(void)
     SDL_snprintf(price, sizeof price, "%d", (int)Adaptive_ContractPrice(MORGRULS));
     CHECK(strstr((char *)ds.Pub_Lines + own * 256, price) && strstr((char *)ds.Pub_Lines + own * 256, "Morgruls"));
 
-    // Others sell the others' only: the spy-hunter nothing for the Morgruls,
-    // the hired spy the Earthlings.
+    // Others sell the others' only: the spy-hunter nothing for the Morgruls;
+    // the Earthlings from the hired spy, until then from the Spy-Hunter.
     talk(1);
     CHECK(!has_item(PUB_CONTRACT_ITEM + MORGRULS));
     Intel_Race(12)->Status = 2;
     talk(2);
     CHECK(!has_item(PUB_CONTRACT_ITEM + 12));  // not hired
+    talk(1);
+    CHECK(has_item(PUB_CONTRACT_ITEM + 12));
     ds.Pub_StoryFlags[1] = 1;
     talk(2);
     CHECK(has_item(PUB_CONTRACT_ITEM + 12));
+    talk(1);
+    CHECK(!has_item(PUB_CONTRACT_ITEM + 12));
     Intel_Race(7)->Status = 2;
     talk(1);
     CHECK(has_item(PUB_CONTRACT_ITEM + 7));
@@ -357,6 +461,40 @@ static void pub(void)
     CHECK(Adaptive_ContractBought(MORGRULS) && ds.Game_Credits == 0 && ds.Pub_MenuIdx == 1);
     talk(4);
     CHECK(!has_item(PUB_CONTRACT_ITEM + MORGRULS) && has_item(PUB_CONTRACT_ITEM + KALLS));
+
+    // However many races are known, no menu goes over the window's seven
+    // rows, and a contract's rows are no wider than its 36 characters.
+    ds.Pub_StoryFlags[1] = 0;
+    for (int16_t r = 2; r <= 12; r++) {
+        Intel_Race(r)->Status = 2;
+        Adaptive_State.contract[r] = 0;
+    }
+    for (int16_t who = 1; who <= 4; who++)
+        for (int16_t mi = 1; mi <= 10; mi++) {
+            talk(who);
+            ds.Pub_MenuIdx = mi;
+            Pub_NoteEntryMenu();
+            Pub_BuildQuestionMenu();
+            CHECK(ds.Pub_LineCount <= 7);
+            for (int i = 1; i <= ds.Pub_CurMenu.Count; i++) {
+                if (!Pub_IsContractItem(((const int8_t *)&ds.Pub_CurMenu)[i]))
+                    continue;
+                int width = 0;
+                for (const char *c = (char *)ds.Pub_Lines + (i - 1) * 256 + 3; *c; c++) {
+                    width = *c == '|' ? 0 : width + 1;
+                    CHECK(width <= 36);
+                }
+            }
+        }
+    // Spy-Hunter, the spy in the pub not hired: his menu has four rows, room for one contract.
+    talk(1);
+    ds.Pub_MenuIdx = 3;
+    Pub_NoteEntryMenu();
+    Pub_BuildQuestionMenu();
+    CHECK(ds.Pub_CurMenu.Count == 3 && ds.Pub_LineCount <= 7);
+    Adaptive_State.contract[MORGRULS] = 1;
+    Intel_Race(MORGRULS)->Status = 2;
+    talk(4);
 
     // Only the first menu of a talk offers them; the switch off, none.
     ds.Pub_MenuIdx = 2;
@@ -434,6 +572,12 @@ static void saves(void)
     CHECK(Adaptive_ContractBought(MORGRULS) && Adaptive_ContractPrice(MORGRULS) == price);
     CHECK(Adaptive_State.waited[WAVE_MORGRUL3] == 77 && Adaptive_State.lead[WAVE_MORGRUL3] == 150);
 
+    // A contract keeps the saves in the port's format when the switch is off.
+    improvements.adaptive_threat = false;
+    CHECK(Improvements_PortSaves());
+    Adaptive_Reset();
+    CHECK(!Improvements_PortSaves());
+
     // A DOS save has none.
     reset(false);
     CHECK(!SaveLoad_PortFormat() && save_slot(4));
@@ -454,9 +598,12 @@ int main(int argc, char *argv[])
     SaveLoad_SetSaveDir(dir);
 
     power_and_scale();
+    weights();
+    joint();
     switch_off();
     waiting();
     warnings();
+    launches();
     contracts();
     pub();
     story();

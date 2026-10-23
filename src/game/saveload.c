@@ -107,7 +107,7 @@ static SlotFormat slot_format[AUTOSAVE_SLOT + 1];
 // The port's format: a header, then the DOS blocks with the building table
 // cut to its count, then the routes and, from version 2, the courses.
 static const uint8_t PORT_MAGIC[8] = {'R', 'E', 'U', 'N', 'I', 'O', 'N', 0x1A};
-enum : uint16_t { PORT_VERSION = 3 };
+enum : uint16_t { PORT_VERSION = 4 };
 
 // --- The block list -----------------------------------------------------------
 
@@ -194,7 +194,7 @@ static bool records(SDL_IOStream *f, void *table, uint16_t count, uint16_t size,
 
 // The port's format has its records after the blocks: the routes'
 // (game/routes.h), then from version 2 the courses' (game/courses.h), from
-// version 3 the adaptive threat's (game/adaptive.h).
+// version 4 the adaptive threat's (game/adaptive.h).
 static bool port_records(SDL_IOStream *f, uint16_t version, bool save)
 {
     if (!records(f, Routes_Table, ROUTE_SLOTS, sizeof(Route), save))
@@ -206,7 +206,7 @@ static bool port_records(SDL_IOStream *f, uint16_t version, bool save)
     }
     if (!records(f, Courses_Extra, COURSE_KINDS, sizeof(Course), save))
         return false;
-    if (version < 3) {
+    if (version < 4) {  // version 3 had the record without the League's first wave
         Adaptive_Reset();
         return true;
     }

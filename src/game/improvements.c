@@ -1,3 +1,4 @@
+#include "game/adaptive.h"
 #include "game/improvements.h"
 
 #include <SDL3/SDL.h>
@@ -47,7 +48,9 @@ bool Improvements_NeedsPortSaves(int i)
 
 bool Improvements_PortSaves(void)
 {
-    return improvements.trade_routes || improvements.no_building_limit || improvements.adaptive_threat;
+    // A signed contract (game/adaptive.h) outlives the switch.
+    return improvements.trade_routes || improvements.no_building_limit || improvements.adaptive_threat
+           || Adaptive_AnyContract();
 }
 
 void Improvements_Init(bool scripted)

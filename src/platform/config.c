@@ -17,8 +17,8 @@ static constexpr Config DEFAULTS = {
     .language = LANGUAGE_ENGLISH,
     .diagnostics = {.hang_seconds = 3, .log_level = CONFIG_LOG_OFF},
     .adaptive = {.level = CONFIG_LEVEL_NORMAL, .band_low = 80, .band_high = 120, .scale_min = 70,
-                 .scale_max = 120, .delay_max = 40, .delay_bonus = 4, .credits_per_unit = 8000,
-                 .colony_units = 2, .warn_on_launch = true, .warn_intel = true,
+                 .scale_max = 120, .delay_max = 40, .delay_bonus = 4, .credits_per_unit = 5000,
+                 .colony_units = 3, .warn_on_launch = true, .warn_intel = true,
                  .contract_min = 50000, .contract_max = 80000},
 };
 
@@ -400,10 +400,10 @@ bool config_save(void)
                            "scale_max = %d ; ... never above (before the bonus for waiting)\n"
                            "delay_max = %d ; a wave may wait this %% of its interval for a weak player\n"
                            "delay_bonus = %d ; %% of strength it gains per 100 h waited\n"
-                           "credits_per_unit = %d ; credits that count as one unit of strength\n"
-                           "colony_units = %d ; units of strength one colony counts as\n"
+                           "credits_per_unit = %d ; credits that count as one Hunter of strength\n"
+                           "colony_units = %d ; Hunters of strength one colony counts as\n"
                            "warn_on_launch = %s ; a message when a wave sets off\n"
-                           "warn_intel = %s ; a message 100-200 h before it, with an observatory\n"
+                           "warn_intel = %s ; a message 100-200 h before it, with an observatory or satellite\n"
                            "contract_min = %d ; an intelligence contract costs between these,\n"
                            "contract_max = %d ; drawn once per race\n"
                            "\n[improvements]\n",

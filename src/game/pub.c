@@ -13,6 +13,9 @@
 #include "game/system.h"
 #include "game/textfile.h"
 
+// Rows of the talk window.
+enum : int { PUB_WINDOW_ROWS = 7 };
+
 // The menu the talk started in (Pub_NoteEntryMenu).
 static int16_t entry_menu = -1;
 
@@ -197,12 +200,14 @@ bool Pub_IsContractItem(int16_t item)
 static void contract_line(char *out, size_t size, int16_t race)
 {
     char label[32];
-    SDL_snprintf(out, size, "%02d Pay %d credits for good, and I'll|warn you of the %s.", 0,
+    // A row of the talk window holds 36 characters.
+    SDL_snprintf(out, size, "%02d Pay %d credits for good|and I'll warn you of the %s.", 0,
                  (int)Adaptive_ContractPrice(race), Adaptive_RaceLabel(race, label, sizeof label));
 }
 
 // Up to two contract lines after the person's own, if the menu has room
-// (a menu holds five questions) and is the one the talk started in.
+// (a menu holds five questions) and is the one the talk started in; the
+// ones that don't fit the window's seven rows are dropped when it is built.
 static void add_contract_items(TMenu *m)
 {
     if (!improvements.adaptive_threat || ds.Pub_MenuIdx != entry_menu)
@@ -221,7 +226,7 @@ void Pub_ContractAnswer(int16_t item)
     char label[32], line[256];
     int32_t price = Adaptive_ContractPrice(race);
     if (Adaptive_BuyContract(race))
-        SDL_snprintf(line, sizeof line, "%02d Done. I'll keep an eye on the %s|and tell you before they strike.",
+        SDL_snprintf(line, sizeof line, "%02d Done. I'll watch the %s|and tell you before they strike.",
                      (int)entry_menu, Adaptive_RaceLabel(race, label, sizeof label));
     else
         SDL_snprintf(line, sizeof line, "%02d That is %d credits, friend.|Come back when you have them.",
@@ -268,11 +273,17 @@ void Pub_BuildQuestionMenu(void)
     uint16_t n = m->Count;
     for (uint16_t i = 1; i <= n && n != 0; i++) {
         char name[32];
-        if (Pub_IsContractItem(m->Items[i - 1]))
+        if (Pub_IsContractItem(m->Items[i - 1])) {
             contract_line(line_at(i), 256, (int16_t)(m->Items[i - 1] - PUB_CONTRACT_ITEM));
-        else
+            if (ds.Pub_LineCount + TextFile_CountLines(line_at(i)) > PUB_WINDOW_ROWS) {
+                m->Count = (uint8_t)(i - 1);  // no room: the rest are contracts too
+                n = m->Count;
+                break;
+            }
+        } else {
             TextFile_ReadTextLine(person_file(name, "kerdes", ".loc"), m->Items[i - 1], line_at(i),
                                   256);
+        }
         lines = TextFile_CountLines(line_at(i));
         for (int16_t j = (int16_t)(ds.Pub_LineCount + 1); j <= ds.Pub_LineCount + lines; j++)
             *line_item(j) = (uint8_t)i;

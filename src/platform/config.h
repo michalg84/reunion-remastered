@@ -60,10 +60,10 @@ typedef struct ConfigAdaptive {
     int scale_max;         // ... never above (before the bonus for waiting)
     int delay_max;         // % of the wave's own interval it may wait for a weak player
     int delay_bonus;       // % of strength a wave gains per 100 h it waited
-    int credits_per_unit;  // credits that count as one unit of strength
-    int colony_units;      // units of strength a colony counts as
+    int credits_per_unit;  // credits that count as one Hunter of strength
+    int colony_units;      // Hunters of strength a colony counts as
     bool warn_on_launch;   // a message when a wave sets off (free)
-    bool warn_intel;       // a message 100-200 h before, with an observatory in its home system
+    bool warn_intel;       // a message 100-200 h before, with an observatory or satellite at its home
     int contract_min;      // an intelligence contract costs between these, drawn per race
     int contract_max;
 } ConfigAdaptive;
