@@ -134,10 +134,26 @@ int32_t Defence_Weight(const DefenceUnit *u)
     return Adaptive_ShipWeight((int64_t)u->dmg * u->hit / 11, u->hp);
 }
 
+bool Defence_Shielded(int16_t system, int16_t planet)
+{
+    if (!improvements.planetary_defence)
+        return false;
+    for (int16_t i = 0; i < ds.Game_BuildingCount; i++) {
+        const TBuilding *b = &ds.Game_Buildings[i];
+        if (b->Kind == DEFENCE_KIND_SHIELD && b->System == system && b->Planet == planet
+            && b->BuildLeft == 0 && b->Powered != 0)
+            return true;
+    }
+    return false;
+}
+
 int32_t Defence_PlanetWeight(int16_t system, int16_t planet)
 {
-    int32_t w = 0;
+    int64_t w = 0;
     for (int i = 0; i < 2; i++)
-        w += Defence_Fighting(&Defence_Units[i], system, planet) * Defence_Weight(&Defence_Units[i]);
-    return w;
+        w += (int64_t)Defence_Fighting(&Defence_Units[i], system, planet) * Defence_Weight(&Defence_Units[i]);
+    // Shots lost are as good as hit points: 1 / (1 - 30%) of them.
+    if (w > 0 && Defence_Shielded(system, planet))
+        w = w * 100 / (100 - DEFENCE_SHIELD_MISS);
+    return (int32_t)SDL_min(w, INT32_MAX);
 }

@@ -280,6 +280,25 @@ static bool att_hits_any(void)
     return a < 11 && b >= 11;
 }
 
+// The defender hits and the shield rolls under 30 / not.
+static bool shot_lost(void)
+{
+    roll(1);
+    uint16_t a = roll(100);
+    roll(1);
+    uint16_t b = roll(100), sh = roll(100);
+    return a >= 40 && b < 11 && sh < DEFENCE_SHIELD_MISS;
+}
+
+static bool shot_lands(void)
+{
+    roll(1);
+    uint16_t a = roll(100);
+    roll(1);
+    uint16_t b = roll(100), sh = roll(100), r = roll(100);
+    return a >= 40 && b < 11 && sh >= DEFENCE_SHIELD_MISS && r > 1;
+}
+
 static void one_step(uint8_t aid, uint8_t acls, uint16_t admg, int16_t ahp, uint8_t did, uint8_t dcls,
                      uint16_t ddmg, int16_t dhp)
 {
@@ -339,6 +358,51 @@ static void rules(void)
     one_step(DEFENCE_ID_TWIN, 2, 68, 3000, 22, 1, 11, 3000);
     CHECK(ds.SpWar_AttackerShipCount == 1);  // above it the battery stands
     CHECK(ship(ds.SpWar_AttackerList, 1)->hp == 3000 - 11);
+}
+
+// An Energy shield on the planet: 30% of the shots at the batteries are lost,
+// the ones at ships are not; the shield counts in the weight.
+static void shield(void)
+{
+    uint32_t seed = 0;
+    reset(true);
+    int32_t base = Adaptive_PlayerPower();
+    add_building(DEFENCE_KIND_TWIN, 1, 5, 0, true, true);
+    int32_t with_battery = Adaptive_PlayerPower();
+    CHECK(!Defence_Shielded(1, 5));
+    add_building(DEFENCE_KIND_SHIELD, 1, 5, 2, true, false);  // no power
+    CHECK(!Defence_Shielded(1, 5));
+    add_building(DEFENCE_KIND_SHIELD, 1, 5, 2, false, true);  // not finished
+    CHECK(!Defence_Shielded(1, 5));
+    add_building(DEFENCE_KIND_SHIELD, 1, 4, 0, true, true);   // another planet
+    CHECK(!Defence_Shielded(1, 5));
+    add_building(DEFENCE_KIND_SHIELD, 1, 5, 2, true, true);   // a moon of the planet
+    CHECK(Defence_Shielded(1, 5));
+    int32_t w = Defence_Weight(&Defence_Units[0]);
+    CHECK(with_battery == base + w);
+    CHECK(Adaptive_PlayerPower() == base + w * 100 / (100 - DEFENCE_SHIELD_MISS));
+    add_building(DEFENCE_KIND_SHIELD, 1, 5, 0, true, true);   // a second adds nothing
+    CHECK(Adaptive_PlayerPower() == base + w * 100 / (100 - DEFENCE_SHIELD_MISS));
+
+    SpWar_InitSpaceFleets();  // the battery joins the battle
+    CHECK(count_id(DEFENCE_ID_TWIN) == 1);
+    CHECK(seed_where(shot_lost, &seed));
+    ds.System_RandSeed = seed;
+    one_step(DEFENCE_ID_TWIN, 2, 68, 3000, 22, 1, 11, 3000);
+    CHECK(ship(ds.SpWar_AttackerList, 1)->hp == 3000);
+    CHECK(seed_where(shot_lands, &seed));
+    ds.System_RandSeed = seed;
+    one_step(DEFENCE_ID_TWIN, 2, 68, 3000, 22, 1, 11, 3000);
+    CHECK(ship(ds.SpWar_AttackerList, 1)->hp == 3000 - 11);
+    // A ship of the player's own is not covered.
+    CHECK(seed_where(shot_lost, &seed));
+    ds.System_RandSeed = seed;
+    one_step(1, 2, 68, 3000, 22, 1, 11, 3000);
+    CHECK(ship(ds.SpWar_AttackerList, 1)->hp == 3000 - 11);
+
+    // Without the improvement the shield is nothing.
+    improvements.planetary_defence = false;
+    CHECK(!Defence_Shielded(1, 5));
 }
 
 // Whole battles of the real step against the simulator's (tools/spacebattle_sim.py,
@@ -517,6 +581,7 @@ int main(int argc, char *argv[])
     weights();
     fleets();
     rules();
+    shield();
     statistics();
     losses();
     saves();

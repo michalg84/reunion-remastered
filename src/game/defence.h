@@ -30,6 +30,7 @@ enum : int {
     DEFENCE_TWIN_LIMIT = 10,   // per body
     DEFENCE_ID_TWIN = 230,     // ids of the ships in a fleet list
     DEFENCE_ID_ION = 231,
+    DEFENCE_SHIELD_MISS = 30,  // % of the shots at a shielded building
 };
 
 // One kind of fighting building.
@@ -73,6 +74,12 @@ void Defence_Demolish(const DefenceUnit *u, int16_t system, int16_t planet, int1
 
 // A battery's combat weight, in tenths of a Hunter (game/adaptive.h).
 int32_t Defence_Weight(const DefenceUnit *u);
+
+// An Energy shield (kind 20) stands finished and powered on the planet (any
+// body of it): the enemy's shots at its batteries and Ion cannon miss
+// DEFENCE_SHIELD_MISS % of the time and are lost. One covers the planet;
+// no more come of more.
+bool Defence_Shielded(int16_t system, int16_t planet);
 
 // The weight of the batteries on a planet (0 without the improvement).
 int32_t Defence_PlanetWeight(int16_t system, int16_t planet);

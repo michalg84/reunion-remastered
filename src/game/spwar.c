@@ -535,6 +535,10 @@ static void step_side(uint8_t *own, int16_t ownCount, uint8_t *foe, int16_t *foe
         const DefenceUnit *su = Defence_UnitOfId(s->id), *tu = Defence_UnitOfId(tg->id);
         bool small_shot = s->cls < 3 && !(su && su->large);
         if (System_Random(100) < (su ? su->hit : 11)) {
+            // A shielded battery: some of the enemy's shots are lost.
+            if (tu && defender && Defence_Shielded(ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet)
+                && System_Random(100) < DEFENCE_SHIELD_MISS)
+                continue;
             if (small_shot && tg->cls > 2)
                 tg->hp = (int16_t)(tg->hp - s->dmg / 3);
             else
