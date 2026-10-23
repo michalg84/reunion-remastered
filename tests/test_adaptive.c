@@ -292,6 +292,19 @@ static void warnings(void)
 // race is an enemy), the League's first, and the joint attack's Kalls.
 static void launches(void)
 {
+    // A force not yet dispatched has no target of its own (all zero): the
+    // early warning still names the story's, Earth.
+    reset(true);
+    config.adaptive.warn_on_launch = false;
+    Intel_Race(7)->Status = 2;
+    TRaceForce *idle = wave(7, 1, 30, 10);
+    idle->System = idle->Body = idle->Moon = 0;
+    Adaptive_State.contract[7] = 1;
+    int16_t idle_timer = 500;
+    for (int h = 1; h <= 450; h++)
+        Adaptive_Tick(WAVE_LAUNCH, &idle_timer, 7, 1);
+    CHECK(ds.Message_LogCount > 0);
+
     // The scheduled launch of the Lisonians: a contract warns, once.
     reset(true);
     config.adaptive.warn_on_launch = false;

@@ -170,12 +170,15 @@ static const char *race_name(int16_t race, char *buf, size_t size)
     return buf;
 }
 
-// "Target: <body>" for the force's destination.
-static void target_line(char *out, size_t size, const TRaceForce *f)
+// The body every story wave is sent to (Intel_DispatchForce in sim.c). A force
+// has no target of its own before it is dispatched, so the advance warning
+// names this one.
+enum { TARGET_SYSTEM = 1, TARGET_BODY = 5, TARGET_MOON = 0 };
+
+// "Target: <body>" for the waves' destination.
+static void target_line(char *out, size_t size)
 {
-    char where[64];
-    PlanetInfo_GetBodyLongName(where, sizeof where, f->System, f->Body, f->Moon);
-    SDL_snprintf(out, size, "%s", where);
+    PlanetInfo_GetBodyLongName(out, size, TARGET_SYSTEM, TARGET_BODY, TARGET_MOON);
 }
 
 // The race's home system has an observatory, or a satellite watches its home body.
@@ -212,7 +215,6 @@ static void strength_range(const WaveForces *w, int percent, int32_t ships[2], i
 // attack, a window of +-24 h around it); `percent` the scale the wave will have.
 static void warn(bool launched, const WaveForces *w, int from, int to, int percent)
 {
-    const TRaceForce *f = Intel_Force(w->race[0], w->force[0]);
     char name[64], label[32], where[96], head[128], when[96], count[96];
     if (w->count == 1) {
         race_name(w->race[0], name, sizeof name);
@@ -224,7 +226,7 @@ static void warn(bool launched, const WaveForces *w, int from, int to, int perce
         SDL_snprintf(head, sizeof head, launched ? " %s and %s fleets have set off " : " %s and %s fleets are gathering ",
                      label, other);
     }
-    target_line(where, sizeof where, f);
+    target_line(where, sizeof where);
     int32_t ships[2], ground[2];
     strength_range(w, percent, ships, ground);
     from = SDL_max(from, 1);
