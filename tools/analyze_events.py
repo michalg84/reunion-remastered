@@ -79,7 +79,8 @@ def site(e):
 
 
 def race_strength(r):
-    return total(r.get("units")) + total(r.get("garrison"))
+    """A race's mobile forces: what can attack (garrisons stay home)."""
+    return total(r.get("units"))
 
 
 # --- The report ------------------------------------------------------------------
@@ -119,6 +120,12 @@ def report(files, events, charts):
         out.append(f"| {b['date']} | {kind} | {b['name'] or '-'} | {site(b)} | {you} / {total(b['player_losses'])} "
                    f"| {them} / {total(b['enemy_losses'])} | {result} |")
     won = sum(1 for b in battles if b["player_won"])
+    if days:
+        out += ["", "## Races at the end", "", "| Race | Status | Bodies | Forces (travelling) | Mobile units | Garrisons |",
+                "|---|---|---|---|---|---|"]
+        for r in days[-1]["races"]:
+            out.append(f"| {r['name']} | {STATUS.get(r['status'], r['status'])} | {r['bodies']} | {r['forces']} ({r['travelling']}) "
+                       f"| {total(r['units'])} | {total(r['garrison'])} |")
     out += ["", f"Won {won} of {len(battles)} battles. Attacks without a battle: "
             f"{sum(1 for a in attacks if not a['battle'])}.", ""]
 
@@ -186,8 +193,8 @@ def charts(events, out_dir, plt):
     if rest:
         ax.plot(x, [sum(race_strength(q) for q in d["races"] if q["race"] in rest) for d in days],
                 color=OTHER, lw=2, ls="--", label="Other races")
-    style(ax, "Units: you and the races (forces + garrisons)", "units")
-    ax.legend(frameon=False, ncol=4, loc="upper left", labelcolor=INK)
+    style(ax, "Units: yours and the races' mobile forces (garrisons left out)", "units")
+    ax.legend(frameon=False, ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.15), labelcolor=INK)
     fig.tight_layout()
     fig.savefig(out_dir / "strength.png", dpi=120)
     plt.close(fig)
