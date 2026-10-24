@@ -22,6 +22,8 @@
 #include "platform/config.h"
 
 
+static uint8_t defence_radar[8];  // the minimap's colours: Ion tiles 228..231, then the battery's 240..243
+
 static int16_t cur_planet(void)
 {
     return ds.Game_CurPlanet[ds.Game_CurSystem - 1];
@@ -154,6 +156,10 @@ void Surface_EnterSurface(void)
         size_t sizes[3] = {0xF000, (size_t)felsz * 0x140, fanim != 0 ? (size_t)fanim * 0x140 : 0};
         Defence_MakeTwinTiles(ds.Surface_BufC, Gfx_PalettePtr(), used, sizes, 3);
     }
+    // The minimap's colours of the Ion cannon's and the battery's tiles.
+    for (int t = 0; t < (twin_tiles ? 8 : 4); t++)
+        defence_radar[t] = Defence_RadarColour(ds.Surface_BufC, Gfx_PalettePtr(),
+                                               (t < 4 ? 228 : DEFENCE_TWIN_FIRST_TILE - 4) + t);
 
     // GetMem(0x1518), 0x1518 and 0x2A30. Whole segments: x or y 0 is below
     // the layer and wraps (cell).
@@ -1003,6 +1009,15 @@ static uint8_t *radar_source(int16_t x, int16_t y)
 {
     uint16_t v = (uint16_t)(*occupy_at((int16_t)(x + 1), (int16_t)(y + 1)) - 1);
     uint16_t ofs;
+    // Port improvement (game/defence.h): the Ion cannon and the Twin battery
+    // show in their light's colour, not the radar sheet's black or nothing.
+    bool twin = v >= DEFENCE_TWIN_FIRST_TILE && v < DEFENCE_TWIN_FIRST_TILE + 4;
+    if (twin || (improvements.planetary_defence && v >= 228 && v < 232)) {
+        static uint8_t cell[0x52];
+        uint8_t c = defence_radar[twin ? v - DEFENCE_TWIN_FIRST_TILE + 4 : v - 228];
+        cell[0] = cell[1] = cell[0x50] = cell[0x51] = c;
+        return cell;
+    }
     if (v == 0xFFFF || v == 0xFE) {
         uint16_t t = *tile_at((int16_t)(x + 1), (int16_t)(y + 1));
         ofs = (uint16_t)((t / 0x14) * 0xA0 + (t % 0x14) * 2 + 0x28);

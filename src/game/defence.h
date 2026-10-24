@@ -62,6 +62,11 @@ const TBuildingType *Defence_Type(int16_t kind);
 enum { DEFENCE_TWIN_FIRST_TILE = 240 };
 int Defence_MakeTwinTiles(uint8_t *sheet, uint8_t *palette, const uint8_t *const used[], const size_t used_size[],
                           int used_count);
+// The colour the minimap (the radar's 2x2 cell) gives the building tile
+// `tile` of `sheet`: its most saturated pixel, the lights. The radar sheets
+// have no cell for the port's tiles, and a black one for the Ion cannon's
+// in most sets.
+uint8_t Defence_RadarColour(const uint8_t *sheet, const uint8_t *palette, int tile);
 
 // Any Twin laser battery stands (the save is in the port's format).
 bool Defence_AnyBattery(void);
