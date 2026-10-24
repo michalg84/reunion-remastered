@@ -16,3 +16,6 @@ hang_watchdog = on   ; hang-*-N.txt when the game loop stands still...
 hang_seconds = 3     ; ...this long
 log_level = debug    ; reunion-*.log: off | error | warn | info | debug
 event_log = on       ; events-*.jsonl: battles, story, daily state (src/game/evlog.h)
+
+[improvements]
+raids = on        ; the Raids improvement (default off); for this run only

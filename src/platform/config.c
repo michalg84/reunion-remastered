@@ -29,6 +29,10 @@ static char *path;
 // dev.ini is in force: reunion.ini's own diagnostics, which config_save writes.
 static bool dev_active;
 static ConfigDiagnostics file_diagnostics;
+// Improvements dev.ini set for this run: their value in reunion.ini (dev_had:
+// whether the file had the key), which config_save keeps writing.
+static ConfigSwitches dev_prev;
+static bool dev_had[CONFIG_MAX_SWITCHES];
 
 static const char *const MUSIC_NAMES[] = {"setup", "none", "soundblaster", "gus"};
 static const char *const DISPLAY_NAMES[] = {"off", "on", "desktop"};
@@ -51,6 +55,7 @@ void config_reset(void)
     SDL_free(path);
     path = nullptr;
     dev_active = false;
+    dev_prev.count = 0;
 }
 
 char *config_default_path(void)
@@ -358,6 +363,20 @@ bool config_load_dev(const char *file, bool all_on)
             .event_log = true,
         };
     bool read = read_file(file, "diagnostics");
+    ConfigSwitches before = config.improvements;
+    read = read_file(file, "improvements") || read;
+    for (int i = 0; i < config.improvements.count; i++) {
+        int j = switch_index(&before, config.improvements.keys[i]);
+        if (j >= 0 && before.on[j] == config.improvements.on[i])
+            continue;
+        if (dev_prev.count == CONFIG_MAX_SWITCHES)
+            break;
+        int n = dev_prev.count++;
+        SDL_strlcpy(dev_prev.keys[n], config.improvements.keys[i], CONFIG_KEY_SIZE);
+        dev_prev.on[n] = j >= 0 && before.on[j];
+        dev_had[n] = j >= 0;
+        dev_active = true;
+    }
     if (read || all_on) {
         file_diagnostics = own;
         dev_active = true;
@@ -453,9 +472,16 @@ bool config_save(void)
                            config.adaptive.contract_min, config.adaptive.contract_max,
                            config.adaptive.raid_min, config.adaptive.raid_max, config.adaptive.raid_gap,
                            config.adaptive.raid_chase_min, config.adaptive.raid_chase_max, config.adaptive.blockade_max) > 0;
-    for (int i = 0; ok && i < config.improvements.count; i++)
-        ok = SDL_IOprintf(io, "%s = %s\n", config.improvements.keys[i],
-                          on_off(config.improvements.on[i])) > 0;
+    for (int i = 0; ok && i < config.improvements.count; i++) {
+        bool on = config.improvements.on[i];
+        int j = switch_index(&dev_prev, config.improvements.keys[i]);
+        if (j >= 0) {
+            if (!dev_had[j])
+                continue;  // dev.ini added it: reunion.ini never had it
+            on = dev_prev.on[j];
+        }
+        ok = SDL_IOprintf(io, "%s = %s\n", config.improvements.keys[i], on_off(on)) > 0;
+    }
     ok = ok && SDL_IOprintf(io, "\n[fixes]\n") > 0;
     for (int i = 0; ok && i < config.fixes.count; i++)
         ok = SDL_IOprintf(io, "%s = %s\n", config.fixes.keys[i], on_off(config.fixes.on[i])) > 0;
