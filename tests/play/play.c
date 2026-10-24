@@ -217,7 +217,7 @@ static PlayResult boot_and_run(const char *script)
         static int n;
         char path[1024];
         SDL_snprintf(path, sizeof path, "%s.%d", tr, n++);
-        trace = fopen(path, "w");
+        trace = fopen(path, "wb");
     }
     if (setjmp(game_out) == 0) {
         Lang_Set(gamedata_language());  // as main.c's boot
@@ -282,7 +282,7 @@ static PlayResult run_policy(const char *script, const char *prefix, const Check
     ctl.policy = policy;
     ctl.arg = arg;
     if (record_path) {
-        ctl.record = fopen(record_path, "w");
+        ctl.record = fopen(record_path, "wb");
         if (!ctl.record)
             return failed_result("can't write the recording %s", record_path);
         fputs(prefix, ctl.record);
