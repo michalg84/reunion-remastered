@@ -272,7 +272,17 @@ static bool draw_target(Target *out)
     }
     if (n == 0)
         return false;
-    int64_t pick = System_Random((uint16_t)SDL_min(total, 60000));
+    // System_Random draws below 65536: with many rich colonies the weights are scaled down so
+    // that the last of them can be drawn too.
+    int64_t scale = (total + 59999) / 60000;
+    if (scale > 1) {
+        total = 0;
+        for (int i = 0; i < n; i++) {
+            found[i].weight = (int32_t)SDL_max(found[i].weight / scale, 1);
+            total += found[i].weight;
+        }
+    }
+    int64_t pick = System_Random((uint16_t)SDL_min(total, 65535));
     for (int i = 0; i < n; i++) {
         pick -= found[i].weight;
         if (pick < 0 || i == n - 1) {
@@ -348,27 +358,41 @@ static void plan(void)
 
 // Another fleet of the race (the planned one) in the plan's words: "<Race>
 // fleet is gathering: raid on <where>", the hours and the ships.
-static void warn_early(void)
+bool Raid_WarningText(char *text, size_t size)
 {
     RaidState *st = &Raid_State;
-    if (!Adaptive_WarnsOf((int16_t)st->plan_race))
-        return;
     int16_t race = 0;
     int32_t hunters = 0, fighters = 0, units[2];
     if (!nearest_wave_of((int16_t)st->plan_race, &race, &hunters, &fighters))
-        return;
-    int32_t defence = Adaptive_DefenceAt((int16_t)st->plan_system, (int16_t)st->plan_planet);
-    Raid_PlanFleet(defence, hunters, fighters, is_early(), units);
+        return false;
+    if (st->plan_mission == RAID_SCOUT) {
+        units[0] = UNDEFENDED_MIN;  // as launch_planned sends it: a few Hunters look
+        units[1] = 0;
+    } else {
+        int32_t defence = Adaptive_DefenceAt((int16_t)st->plan_system, (int16_t)st->plan_planet);
+        Raid_PlanFleet(defence, hunters, fighters, is_early(), units);
+    }
     int32_t ships = units[0] + units[1];
-    char label[32], where[96], text[360];
+    char label[32], where[96];
     Adaptive_RaceLabel((int16_t)st->plan_race, label, sizeof label);
     where_is(where, sizeof where, st->plan_system, st->plan_planet, st->plan_moon);
     int from = SDL_max((int)st->timer - 24, 1), to = (int)st->timer + 24;
-    const char *what = st->plan_mission == RAID_BLOCKADE ? "Blockade: will stay and hold it" : "Raid: shells from orbit and leaves";
-    SDL_snprintf(text, sizeof text, "     INTELLIGENCE     | %s fleet is gathering |  %s | %s | Sets off in %d-%d h |"
+    const char *what = st->plan_mission == RAID_BLOCKADE ? "Blockade: will stay and hold it"
+                       : st->plan_mission == RAID_SCOUT  ? "Scouts: will look and leave"
+                                                         : "Raid: shells from orbit and leaves";
+    SDL_snprintf(text, size, "     INTELLIGENCE     | %s fleet is gathering |  %s | %s | Sets off in %d-%d h |"
                  " Ships %d-%d |",
                  label, what, where, from, to, (int)(ships * 7 / 10), (int)((ships * 13 + 9) / 10));
-    Message_ShowMessage(text);
+    return true;
+}
+
+static void warn_early(void)
+{
+    if (!Adaptive_WarnsOf((int16_t)Raid_State.plan_race))
+        return;
+    char text[360];
+    if (Raid_WarningText(text, sizeof text))
+        Message_ShowMessage(text);
 }
 
 static int16_t travel_hours(int16_t race, int s, int p)
@@ -902,7 +926,11 @@ bool Raid_BattleOver(bool playerWon)
     }
     // The player lost what he had there: the raiders have the sky.
     if (f->mission == RAID_BLOCKADE) {
-        f->phase = RAID_PHASE_STAYING;
+        if (f->phase != RAID_PHASE_STAYING) {
+            // It came to hold the body: its time starts now, not with the waiting's last hour.
+            f->phase = RAID_PHASE_STAYING;
+            f->clock = (uint16_t)SDL_clamp(config.adaptive.blockade_max, 1, 60000);
+        }
         announce("BLOCKADE", f, "Your ships are gone");
     } else {
         bombard(f, st->defence);

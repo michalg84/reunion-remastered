@@ -589,9 +589,20 @@ static void raid_retreat(void)
     }
     if (!Raid_RetreatCheck(alive))
         return;
-    for (int16_t i = 1; i <= ds.SpWar_DefenderShipCount; i++)
-        Ship(ds.SpWar_DefenderList, i)->pos = 0xFF;
-    ds.SpWar_DefenderShipCount = 0;
+    // Only the raid's ships go (to the end of the list, as the dead are); whoever else
+    // defends the planet fights on.
+    for (int16_t i = 1; i <= ds.SpWar_DefenderShipCount;) {
+        SpShip *s = Ship(ds.SpWar_DefenderList, i);
+        if (s->id != RAID_SHIP_ID) {
+            i++;
+            continue;
+        }
+        s->pos = 0xFF;
+        SpShip tmp = *Ship(ds.SpWar_DefenderList, ds.SpWar_DefenderShipCount);
+        *Ship(ds.SpWar_DefenderList, ds.SpWar_DefenderShipCount) = *s;
+        *s = tmp;
+        ds.SpWar_DefenderShipCount--;
+    }
 }
 
 // Explosion frames of the ships lost (the end of the list from the live count).

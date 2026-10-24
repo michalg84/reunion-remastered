@@ -617,6 +617,13 @@ static void blockade(void)
     SpWar_ApplySpaceLosses();
     CHECK(Raid_BattleOver(false));
     CHECK(Raid_State.fleet[0].phase == RAID_PHASE_STAYING && Raid_Blockaded(1, 3, 0));
+    // It holds for its full time, not for the hour the waiting had left.
+    CHECK(Raid_State.fleet[0].clock == config.adaptive.blockade_max);
+    ds.Game_GroupCount = 0;
+    ds.Game_CurrentScreen = 1;
+    ds.Game_ScreenSwitch = 0;
+    hours(24);
+    CHECK(Raid_Blockaded(1, 3, 0) && Raid_State.fleet[0].clock == config.adaptive.blockade_max - 24);
 }
 
 static void scouts(void)
@@ -670,6 +677,85 @@ static bool load_slot(int16_t slot)
     SaveLoad_ReadSlotNames();
     ds.SaveLoad_SelectedSlot = slot;
     return SaveLoad_Transfer(false);
+}
+
+// The advance warning of a scout says scouts and counts their ships, not a raid's.
+static void warning_texts(void)
+{
+    reset(true);
+    Raid_State.plan_race = MORGRULS;
+    Raid_State.plan_system = 1;
+    Raid_State.plan_planet = 5;
+    Raid_State.timer = 150;
+    char text[360];
+    Raid_State.plan_mission = RAID_SCOUT;
+    CHECK(Raid_WarningText(text, sizeof text));
+    CHECK(strstr(text, "Scouts: will look and leave") && !strstr(text, "Raid:") && strstr(text, "Ships 2-4"));
+    Raid_State.plan_mission = RAID_RAID;
+    CHECK(Raid_WarningText(text, sizeof text) && strstr(text, "Raid: shells from orbit"));
+    Raid_State.plan_mission = RAID_BLOCKADE;
+    CHECK(Raid_WarningText(text, sizeof text) && strstr(text, "Blockade: will stay"));
+}
+
+// A raid that turns back takes its own ships out of the battle; another race's
+// ships defending the planet fight on.
+static void retreat_leaves_others(void)
+{
+    reset(true);
+    colony(1, 3, 0);
+    ships_at(1, 3, 3);
+    arrive_at(RAID_RAID, 1, 3, 0, 8, 0);
+    hours(1);
+    CHECK(Raid_BattleActive());
+    SpWar_InitSpaceFleets();
+    CHECK(count_raid_ships() == 8);
+    SpShip *list = (SpShip *)ds.SpWar_DefenderList;
+    SpShip *other = &list[ds.SpWar_DefenderShipCount++];
+    memcpy(other, &list[0], sizeof *other);
+    other->id = 41;  // a race's own force
+    for (int i = 0; i < 6; i++)
+        list[i].hp = 0;  // six of the raid's eight are down: a quarter of its weight is left
+    ds.SpWar_StepNo = 0;
+    SpWar_StepSpaceBattle();
+    CHECK(Raid_State.fled == 1);
+    CHECK(count_raid_ships() == 0);
+    CHECK(ds.SpWar_DefenderShipCount == 1 && list[0].id == 41 && list[0].hp > 0);
+}
+
+// With many rich colonies the weights add up past what one draw spans: every
+// colony can still be the target, the last of them too.
+static void many_targets(void)
+{
+    reset(true);
+    int owned = 0;
+    int16_t ls = 0, lp = 0, lm = 0;
+    for (int16_t sy = 1; sy <= 8; sy++)
+        for (int16_t p = 1; p <= ds.Galaxy_PlanetCount[sy - 1]; p++)
+            for (int16_t m = 0; m <= ds.Galaxy_MoonLists[sy - 1][p - 1].Count; m++) {
+                TBody *b = PlanetInfo_BodyAt(sy, p, m);
+                if (!b || (sy == 1 && p == 5 && m == 0))
+                    continue;
+                colony(sy, p, m);
+                for (int k = 0; k < 6; k++)
+                    b->Stores[k] = 100000;
+                owned++;
+                ls = sy;
+                lp = p;
+                lm = m;
+            }
+    CHECK(owned >= 90);  // 700 apiece: past 60,000 in all
+    int last = 0, first = 0;
+    for (int i = 0; i < 4000; i++) {
+        Raid_State.timer = 0;
+        Raid_State.plan_mission = RAID_NONE;
+        Raid_State.fleet[0].phase = RAID_PHASE_NONE;
+        ds.Game_Hour = 23;
+        hours(1);
+        CHECK(Raid_State.plan_mission != RAID_NONE);
+        last += Raid_State.plan_system == ls && Raid_State.plan_planet == lp && Raid_State.plan_moon == lm;
+        first += Raid_State.plan_system == 1 && Raid_State.plan_planet == 1 && Raid_State.plan_moon == 0;
+    }
+    CHECK(last > 0 && first > 0);
 }
 
 static void saves(void)
@@ -753,6 +839,9 @@ int main(int argc, char *argv[])
     battles();
     blockade();
     scouts();
+    warning_texts();
+    retreat_leaves_others();
+    many_targets();
     saves();
     switch_off();
 
