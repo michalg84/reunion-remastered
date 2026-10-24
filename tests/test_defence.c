@@ -553,6 +553,38 @@ static bool load_slot(int16_t slot)
     return SaveLoad_Transfer(false);
 }
 
+// The battery's tiles: the Ion's with its red lights blue, in colours the sheets do not use.
+static void twin_tiles(void)
+{
+    enum { STRIDE = 0x140, ROW = 16 * STRIDE };
+    static uint8_t sheet[0x10400];
+    static uint8_t pal[256 * 3];
+    memset(sheet, 0, sizeof sheet);
+    memset(pal, 0, sizeof pal);
+    // Colours 0xB0.. in use: 0xB1 grey, 0xB2 dark red, 0xB3 bright red, 0xEF too (taken).
+    pal[0xB1 * 3] = pal[0xB1 * 3 + 1] = pal[0xB1 * 3 + 2] = 30;
+    pal[0xB2 * 3] = 32;
+    pal[0xB3 * 3] = 60;
+    // Tile 228 (row 11, column 8): grey, a dark and a bright red pixel; tile 231 (column 11): one more dark red.
+    uint8_t *t228 = sheet + 11 * ROW + 8 * 16, *t231 = sheet + 11 * ROW + 11 * 16;
+    t228[0] = 0xB1;
+    t228[1] = 0xB2;
+    t228[STRIDE + 3] = 0xB3;
+    t231[5 * STRIDE] = 0xB2;
+    uint8_t other[4] = {0xEF, 0xB1, 0xB2, 0xB3};  // another sheet that uses 0xEF
+    const uint8_t *used[2] = {sheet, other};
+    size_t sizes[2] = {0xF000, sizeof other};
+    CHECK(Defence_MakeTwinTiles(sheet, pal, used, sizes, 2) == 3);
+    uint8_t *tw0 = sheet + 12 * ROW, *tw3 = sheet + 12 * ROW + 3 * 16;
+    CHECK(tw0[0] == 0xB1);                                   // grey stays
+    CHECK(tw0[1] == 0xEE && tw0[STRIDE + 3] == 0xED);        // the reds: the free colours from the top
+    CHECK(tw3[5 * STRIDE] == 0xEE);                          // the same dark red, the same blue
+    CHECK(pal[0xEE * 3 + 2] == 32 && pal[0xEE * 3] == 0 && pal[0xED * 3 + 2] == 60);
+    CHECK(t228[1] == 0xB2 && t228[STRIDE + 3] == 0xB3);      // the Ion's tiles are as they were
+    const TBuildingType *twin = Defence_Type(DEFENCE_KIND_TWIN);
+    CHECK(twin->Tiles[0][0] == DEFENCE_TWIN_FIRST_TILE && twin->Tiles[1][1] == DEFENCE_TWIN_FIRST_TILE + 3);
+}
+
 static void saves(void)
 {
     // A battery makes the save the port's, and it comes back whole, with the
@@ -602,6 +634,7 @@ int main(int argc, char *argv[])
     shield();
     statistics();
     losses();
+    twin_tiles();
     saves();
 
     for (int n = 3; n <= 4; n++) {

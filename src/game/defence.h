@@ -53,6 +53,16 @@ int16_t Defence_KindCount(void);
 // The type of building kind 1..26. The 26th is the port's own.
 const TBuildingType *Defence_Type(int16_t kind);
 
+// The Twin laser battery's tiles (240..243, row 12 of the sheet BufC holds
+// past the game's own 12 rows): the Ion cannon's (228..231) with its red lights
+// blue. `sheet` is that buffer, `palette` the game's (256 x 3, 6-bit) and the
+// `used` buffers the picture indices (the sheets' own, palette offset 0xB0
+// added) in use: the blue gets colours none of them uses. Returns the number
+// of pixels made blue.
+enum { DEFENCE_TWIN_FIRST_TILE = 240 };
+int Defence_MakeTwinTiles(uint8_t *sheet, uint8_t *palette, const uint8_t *const used[], const size_t used_size[],
+                          int used_count);
+
 // Any Twin laser battery stands (the save is in the port's format).
 bool Defence_AnyBattery(void);
 

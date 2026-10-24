@@ -22,7 +22,7 @@ static const TBuildingType twin_battery = {
     .BuildChance = 10,
     .Width = 2,
     .Height = 2,
-    .Tiles = {{228, 229}, {230, 231}},
+    .Tiles = {{240, 241}, {242, 243}},  // the Ion cannon's, red lights blue (Defence_MakeTwinTiles)
 };
 
 const DefenceUnit Defence_Units[2] = {
@@ -157,3 +157,67 @@ int32_t Defence_PlanetWeight(int16_t system, int16_t planet)
         w = w * 100 / (100 - DEFENCE_SHIELD_MISS);
     return (int32_t)SDL_min(w, INT32_MAX);
 }
+
+enum {
+    SHEET_COLOUR_BASE = 0xB0,  // the surface sheets' palette offset
+    SHEET_COLOURS = 64,
+    ION_FIRST_TILE = 228,
+    TILE_PER_ROW = 20,
+    TILE_SIZE = 16,
+    SHEET_STRIDE = 0x140,
+};
+
+static size_t tile_offset(int tile)
+{
+    return (size_t)(tile % TILE_PER_ROW) * TILE_SIZE + (size_t)(tile / TILE_PER_ROW) * (TILE_SIZE * SHEET_STRIDE);
+}
+
+// A red light: a strong red with no green or blue (6-bit values).
+static bool is_red(const uint8_t *palette, int colour)
+{
+    const uint8_t *c = palette + colour * 3;
+    return c[0] >= 28 && c[1] <= 10 && c[2] <= 10;
+}
+
+int Defence_MakeTwinTiles(uint8_t *sheet, uint8_t *palette, const uint8_t *const used[], const size_t used_size[],
+                          int used_count)
+{
+    bool in_use[256] = {false};
+    for (int i = 0; i < used_count; i++)
+        for (size_t k = 0; k < used_size[i]; k++)
+            in_use[used[i][k]] = true;
+
+    int map[256];
+    for (int c = 0; c < 256; c++)
+        map[c] = -1;
+    int free_colour = SHEET_COLOUR_BASE + SHEET_COLOURS - 1;
+    int made = 0;
+    for (int t = 0; t < 4; t++) {
+        const uint8_t *from = sheet + tile_offset(ION_FIRST_TILE + t);
+        uint8_t *to = sheet + tile_offset(DEFENCE_TWIN_FIRST_TILE + t);
+        for (int y = 0; y < TILE_SIZE; y++) {
+            for (int x = 0; x < TILE_SIZE; x++) {
+                uint8_t c = from[y * SHEET_STRIDE + x];
+                if (map[c] < 0) {
+                    map[c] = c;
+                    if (c >= SHEET_COLOUR_BASE && c < SHEET_COLOUR_BASE + SHEET_COLOURS && is_red(palette, c)) {
+                        while (free_colour >= SHEET_COLOUR_BASE && in_use[free_colour])
+                            free_colour--;
+                        if (free_colour >= SHEET_COLOUR_BASE) {
+                            const uint8_t *r = palette + c * 3;
+                            uint8_t *b = palette + free_colour * 3;
+                            b[0] = 0;
+                            b[1] = (uint8_t)(r[0] * 3 / 10);
+                            b[2] = r[0];
+                            map[c] = free_colour--;
+                        }
+                    }
+                }
+                to[y * SHEET_STRIDE + x] = (uint8_t)map[c];
+                made += map[c] != c;
+            }
+        }
+    }
+    return made;
+}
+
