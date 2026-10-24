@@ -263,9 +263,9 @@ static void build_rows(void)
             r = add(ROW_CHOICE, R_SIZE, "Size", nullptr);
             size_text(r->value, sizeof r->value);
         }
-        static const char *const filters[] = {"Sharp", "Smooth", "Scale2x", "CRT"};
+        static const char *const filters[] = {"Sharp", "Scale2x", "CRT"};
         r = add(ROW_CHOICE, R_FILTER, "Filter",
-                "Sharp: pixels as they are. Smooth: blurred. Scale2x: rounded edges. CRT: scan lines.");
+                "Sharp: pixels as they are. Scale2x: rounded edges. CRT: scan lines.");
         SDL_strlcpy(r->value, filters[config.filter], sizeof r->value);
         break;
     }

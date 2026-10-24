@@ -24,7 +24,6 @@ typedef enum : int {
 // [video] filter: how the 320x200 frame is enlarged (platform/video.c).
 typedef enum : int {
     CONFIG_FILTER_SHARP,    // pixels as they are (the default)
-    CONFIG_FILTER_SMOOTH,   // bilinear
     CONFIG_FILTER_SCALE2X,  // Scale2x: rounded diagonals, no blended colours
     CONFIG_FILTER_CRT,      // dimmed scan lines
 } ConfigFilter;
