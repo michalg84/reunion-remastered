@@ -44,7 +44,7 @@ def decode(path):
         pixels, bad = rows(data, width + 1, height)
         width += 1
     raw = data[-PALETTE:]
-    palette = [min(255, (v & 0x3F) * 255 // 63) for v in raw]  # 6-bit VGA -> 8-bit
+    palette = [(v >> 2) * 255 // 63 for v in raw]  # 6-bit VGA -> 8-bit
     return width, height, bytes(pixels[: width * height]), palette
 
 
