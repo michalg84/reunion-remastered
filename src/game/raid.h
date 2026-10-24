@@ -103,6 +103,9 @@ int Raid_SystemMark(int16_t system);
 // The race of that fleet (for its flag); 0 if none.
 int16_t Raid_MarkRace(int16_t system);
 
+// The advance warning of the planned mission as it reads (false: nothing to say).
+bool Raid_WarningText(char *text, size_t size);
+
 // The battle in hand is a raid's.
 bool Raid_BattleActive(void);
 // The fleet in that battle.
