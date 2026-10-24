@@ -9,7 +9,7 @@
 #include "game/saveload.h"
 #include "platform/config.h"
 
-enum : int { WEEK = 7 };  // midnights
+enum : int { WEEK = 7, STATUS_FRAMES = 150 };  // midnights; frames the status line keeps its word
 
 static struct {
     void *data;  // the copy
@@ -18,6 +18,8 @@ static struct {
     int midnights;         // since the file was last written
     uint64_t written_ms;   // when a file was last written, or the game began
     bool quick_save;       // asked for
+    const char *status;    // the status line's word, redrawn while status_frames last
+    int status_frames;
 } autosave;
 
 static uint64_t (*ticks)(void) = SDL_GetTicks;
@@ -77,6 +79,7 @@ void Autosave_Reset(void)
     autosave.midnights = 0;
     autosave.written_ms = ticks();
     autosave.quick_save = false;
+    autosave.status_frames = 0;
     if (improvements.autosave)
         take_copy();
     else
@@ -127,6 +130,11 @@ static bool timed_due(void)
 
 void Autosave_Frame(void)
 {
+    // The hint line is redrawn by the screens at once; the word stays a while.
+    if (autosave.status_frames > 0) {
+        autosave.status_frames--;
+        Gfx_DrawStatusText(autosave.status);
+    }
     if (!autosave.quick_save && !timed_due())
         return;
     autosave.quick_save = false;
@@ -135,5 +143,7 @@ void Autosave_Frame(void)
     void *data = ds.Game_ClockRunning ? save_now(&size) : nullptr;
     bool saved = data && write_file(data, size);
     SDL_free(data);
-    Gfx_DrawStatusText(Lang_Text(saved ? "Game saved" : "Can't save now"));
+    autosave.status = Lang_Text(saved ? "Game saved" : "Can't save now");
+    autosave.status_frames = STATUS_FRAMES;
+    Gfx_DrawStatusText(autosave.status);
 }

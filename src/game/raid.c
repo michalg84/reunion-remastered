@@ -353,7 +353,7 @@ static void warn_early(void)
     Adaptive_RaceLabel((int16_t)st->plan_race, label, sizeof label);
     where_is(where, sizeof where, st->plan_system, st->plan_planet, st->plan_moon);
     int from = SDL_max((int)st->timer - 24, 1), to = (int)st->timer + 24;
-    const char *what = st->plan_mission == RAID_BLOCKADE ? "will blockade" : "will raid";
+    const char *what = st->plan_mission == RAID_BLOCKADE ? "will blockade it" : "will shell it, not stay";
     SDL_snprintf(text, sizeof text, "     INTELLIGENCE     | %s fleet is gathering |  It %s | %s | Sets off in %d-%d h |"
                  " Ships %d-%d |",
                  label, what, where, from, to, (int)(ships * 7 / 10), (int)((ships * 13 + 9) / 10));
@@ -634,7 +634,7 @@ static void arrive(int slot)
     if (f->mission == RAID_SCOUT) {
         f->phase = RAID_PHASE_STAYING;
         f->clock = SCOUT_STAY;
-        announce("ALIEN SCOUTS", f, "They look around");
+        announce("ALIEN SCOUTS", f, "A raid will follow");
         return;
     }
     f->phase = RAID_PHASE_WAITING;
