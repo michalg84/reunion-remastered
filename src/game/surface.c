@@ -124,8 +124,11 @@ void Surface_EnterSurface(void)
     Gfx_LoadPic(name, ds.Surface_RadarColors, 1, 0x1A, 0, 0, 0x50, false,
                 Gfx_PalettePtr(), 0, 0x3F, 0xB0, 0, 0x3F);
 
-    // Row 12 (tiles 240..) is the port's: the Twin laser battery's (game/defence.h).
-    ds.Surface_BufC = game_alloc(0x10400);
+    // Row 12 (tiles 240..) is the port's: the Twin laser battery's
+    // (game/defence.h), only while it can be built or one stands, so that
+    // without them memory and palette are the original's.
+    bool twin_tiles = improvements.planetary_defence || Defence_AnyBattery();
+    ds.Surface_BufC = game_alloc(twin_tiles ? 0x10400 : 0xF000);
     SDL_snprintf(name, sizeof name, "planets\\epul%s%d", ds.Game_CurBody->Owner > 1 ? "t" : "",
                  set);
     Gfx_LoadPic(name, ds.Surface_BufC, 1, 0xC0, 0, 0, 0x140, false,
@@ -146,7 +149,7 @@ void Surface_EnterSurface(void)
     Gfx_LoadPic(name, ds.Surface_BufB, 1, (uint16_t)felsz, 0, 0, 0x140,
                 false, Gfx_PalettePtr(), 0, 0x3F, 0xB0, 0, 0x3F);
 
-    {
+    if (twin_tiles) {
         const uint8_t *used[3] = {ds.Surface_BufC, ds.Surface_BufB, ds.Surface_BufD};
         size_t sizes[3] = {0xF000, (size_t)felsz * 0x140, fanim != 0 ? (size_t)fanim * 0x140 : 0};
         Defence_MakeTwinTiles(ds.Surface_BufC, Gfx_PalettePtr(), used, sizes, 3);
