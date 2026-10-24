@@ -56,6 +56,7 @@ typedef enum : int {
     R_EFFECTS_VOLUME,
     R_DISPLAY,
     R_SIZE,
+    R_FILTER,
     R_SKIP_INTRO,
     R_COLONY_STATS,
     R_DETOXIN_RATE,
@@ -262,6 +263,10 @@ static void build_rows(void)
             r = add(ROW_CHOICE, R_SIZE, "Size", nullptr);
             size_text(r->value, sizeof r->value);
         }
+        static const char *const filters[] = {"Sharp", "Smooth", "Scale2x", "CRT"};
+        r = add(ROW_CHOICE, R_FILTER, "Filter",
+                "Sharp: pixels as they are. Smooth: blurred. Scale2x: rounded edges. CRT: scan lines.");
+        SDL_strlcpy(r->value, filters[config.filter], sizeof r->value);
         break;
     }
     case SEC_GAME:
@@ -453,6 +458,10 @@ static void act(const Row *r, int dir)
         break;
     case R_SIZE:
         change_size(dir ? dir : 1);
+        break;
+    case R_FILTER:
+        config.filter = step(config.filter, dir ? dir : 1, CONFIG_FILTER_SHARP, CONFIG_FILTER_CRT, true);
+        vid_apply_filter();
         break;
     case R_SKIP_INTRO:
         config.skip_intro = !config.skip_intro;

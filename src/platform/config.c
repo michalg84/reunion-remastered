@@ -37,6 +37,7 @@ static bool dev_had[CONFIG_MAX_SWITCHES];
 
 static const char *const MUSIC_NAMES[] = {"setup", "none", "soundblaster", "gus"};
 static const char *const DISPLAY_NAMES[] = {"off", "on", "desktop"};
+static const char *const FILTER_NAMES[] = {"sharp", "smooth", "scale2x", "crt"};
 static const char *const LEVEL_NAMES[] = {"easy", "normal", "hard"};
 static const char *const LOG_LEVEL_NAMES[] = {"off", "error", "warn", "info", "debug"};
 
@@ -224,6 +225,8 @@ static void set_value(const char *section, const char *key, const char *v)
         parse_int(v, &config.effects_volume, 0, 100);
     else if (IS("video", "fullscreen"))
         parse_name(v, (int *)&config.display, DISPLAY_NAMES, (int)SDL_arraysize(DISPLAY_NAMES));
+    else if (IS("video", "filter"))
+        parse_name(v, (int *)&config.filter, FILTER_NAMES, (int)SDL_arraysize(FILTER_NAMES));
     else if (IS("video", "window_width"))
         parse_int(v, &config.window_width, 320, 16384);
     else if (IS("video", "window_height"))
@@ -416,6 +419,7 @@ bool config_save(void)
                            "fullscreen_width = %d ; 0: the desktop's resolution\n"
                            "fullscreen_height = %d\n"
                            "fullscreen_refresh = %g\n"
+                           "filter = %s ; sharp | smooth | scale2x | crt\n"
                            "\n[game]\n"
                            "skip_intro = %s\n"
                            "colony_stats = %s\n"
@@ -453,7 +457,7 @@ bool config_save(void)
                            MUSIC_NAMES[config.music], on_off(config.effects), config.music_volume,
                            config.effects_volume, DISPLAY_NAMES[config.display],
                            config.window_width, config.window_height, config.fullscreen_width,
-                           config.fullscreen_height, (double)config.fullscreen_refresh,
+                           config.fullscreen_height, (double)config.fullscreen_refresh, FILTER_NAMES[config.filter],
                            on_off(config.skip_intro), on_off(config.colony_stats),
                            on_off(config.detoxin_rate),
                            gamedata_language_name(config.language), config.autosave_minutes,

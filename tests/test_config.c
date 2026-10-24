@@ -49,6 +49,7 @@ int main(void)
                      "window_width = 960\n"
                      "window_height = x\n"
                      "fullscreen_refresh = 59.94\n"
+                     "filter = Scale2X\n"
                      "[game]\n"
                      "skip_intro = yes\n"
                      "colony_stats = off\n"
@@ -73,6 +74,7 @@ int main(void)
     CHECK(config.music_volume == 100 && config.effects_volume == 30);
     CHECK(config.display == CONFIG_DESKTOP && config.window_width == 960 && config.window_height == 960);
     CHECK(SDL_fabsf(config.fullscreen_refresh - 59.94f) < 0.001f);
+    CHECK(config.filter == CONFIG_FILTER_SCALE2X);
     CHECK(config.skip_intro && !config.colony_stats && !config.detoxin_rate);
     CHECK(config.language == LANGUAGE_ITALIAN);
     CHECK(!config_fix("find_jade") && config_fix("mine_all_systems") && config_fix("unlisted"));

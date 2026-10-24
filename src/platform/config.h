@@ -21,6 +21,14 @@ typedef enum : int {
     CONFIG_DESKTOP,     // borderless at the desktop resolution
 } ConfigDisplay;
 
+// [video] filter: how the 320x200 frame is enlarged (platform/video.c).
+typedef enum : int {
+    CONFIG_FILTER_SHARP,    // pixels as they are (the default)
+    CONFIG_FILTER_SMOOTH,   // bilinear
+    CONFIG_FILTER_SCALE2X,  // Scale2x: rounded diagonals, no blended colours
+    CONFIG_FILTER_CRT,      // dimmed scan lines
+} ConfigFilter;
+
 // [diagnostics] log_level: what goes to logs/reunion-*.log (platform/diag.h).
 typedef enum : int {
     CONFIG_LOG_OFF,  // no log file
@@ -110,6 +118,7 @@ typedef struct Config {
     int window_width, window_height;
     int fullscreen_width, fullscreen_height;  // 0: the desktop's mode
     float fullscreen_refresh;                 // Hz, 0: any
+    ConfigFilter filter;
     // [game]
     bool skip_intro;
     bool colony_stats;  // planet info: the POP row opens the colony's stats

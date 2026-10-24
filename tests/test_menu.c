@@ -130,9 +130,9 @@ int main(void)
 
     // Video: Desktop has no size row.
     go_to(SEC_VIDEO);
-    CHECK(menu_row_count() == 2 && row_is(1, "Size <1280x960>"));
+    CHECK(menu_row_count() == 3 && row_is(1, "Size <1280x960>") && row_is(2, "Filter <Sharp>"));
     press(SDLK_LEFT);
-    CHECK(config.display == CONFIG_DESKTOP && menu_row_count() == 1);
+    CHECK(config.display == CONFIG_DESKTOP && menu_row_count() == 2);
     press(SDLK_RIGHT);
     CHECK(config.display == CONFIG_WINDOWED);
 

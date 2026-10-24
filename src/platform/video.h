@@ -64,6 +64,8 @@ void vid_present(void);
 // Alt+Enter: between the window and the last full-screen choice (desktop
 // by default); updates the config.
 void vid_toggle_fullscreen(void);
+// Rebuilds the texture for config.filter (the Video menu): mode 13h only.
+void vid_apply_filter(void);
 // Applies config.display and the window or full-screen size.
 void vid_apply_display(void);
 // Window events from the event loops: a window resized by hand keeps its
