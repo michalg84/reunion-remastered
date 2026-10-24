@@ -81,6 +81,11 @@ typedef struct Fixes {
     // first attack force launches, and the Eran's job needs it. The fix
     // keeps offering it, as the CD release does.
     bool league_tip;
+    // The minimap (radar) draws a building whose cell in the radar sheet is
+    // black, which is most of the Ion cannon's and some of the surface sets'
+    // other buildings', as a black patch. The fix draws it in the colour
+    // that is commonest in the building's own tile.
+    bool minimap_buildings;
 } Fixes;
 
 extern Fixes fixes;

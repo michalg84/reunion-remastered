@@ -49,6 +49,7 @@ int main(void)
                      "window_width = 960\n"
                      "window_height = x\n"
                      "fullscreen_refresh = 59.94\n"
+                     "filter = Scale2X\n"
                      "[game]\n"
                      "skip_intro = yes\n"
                      "colony_stats = off\n"
@@ -73,6 +74,7 @@ int main(void)
     CHECK(config.music_volume == 100 && config.effects_volume == 30);
     CHECK(config.display == CONFIG_DESKTOP && config.window_width == 960 && config.window_height == 960);
     CHECK(SDL_fabsf(config.fullscreen_refresh - 59.94f) < 0.001f);
+    CHECK(config.filter == CONFIG_FILTER_SCALE2X);
     CHECK(config.skip_intro && !config.colony_stats && !config.detoxin_rate);
     CHECK(config.language == LANGUAGE_ITALIAN);
     CHECK(!config_fix("find_jade") && config_fix("mine_all_systems") && config_fix("unlisted"));
@@ -137,6 +139,17 @@ int main(void)
     config_reset();
     config_load(path);
     CHECK(d->crash_dumps && !d->event_log && d->hang_seconds == 3 && d->log_level == CONFIG_LOG_WARN);
+    // dev.ini's [improvements] switch them for the run too; reunion.ini keeps its own.
+    write_file(path, "[improvements]\ntrade_routes = on\n");
+    write_file(dev, "[improvements]\nautosave = off\ntrade_routes = off\n");
+    config_reset();
+    config_load(path);
+    CHECK(config_improvement("autosave") && config_improvement("trade_routes"));  // absent: on
+    CHECK(config_load_dev(dev, false) && !config_improvement("autosave") && !config_improvement("trade_routes"));
+    CHECK(config_save());
+    config_reset();
+    config_load(path);
+    CHECK(config_improvement("autosave") && config_improvement("trade_routes"));
     // --dev without a file: everything on; a missing file alone does nothing.
     SDL_RemovePath(dev);
     CHECK(!config_load_dev(dev, false) && !config_dev_active());

@@ -56,10 +56,15 @@ typedef enum : int {
     R_EFFECTS_VOLUME,
     R_DISPLAY,
     R_SIZE,
+    R_FILTER,
     R_SKIP_INTRO,
     R_COLONY_STATS,
     R_DETOXIN_RATE,
     R_LANGUAGE,
+    R_AUTOSAVE_MINUTES,
+    R_THREAT_LEVEL,
+    R_WARN_LAUNCH,
+    R_WARN_INTEL,
     R_IMPROVEMENTS_ON,
     R_IMPROVEMENTS_OFF,
     R_FIXES_ON,
@@ -258,6 +263,10 @@ static void build_rows(void)
             r = add(ROW_CHOICE, R_SIZE, "Size", nullptr);
             size_text(r->value, sizeof r->value);
         }
+        static const char *const filters[] = {"Sharp", "Smooth", "Scale2x", "CRT"};
+        r = add(ROW_CHOICE, R_FILTER, "Filter",
+                "Sharp: pixels as they are. Smooth: blurred. Scale2x: rounded edges. CRT: scan lines.");
+        SDL_strlcpy(r->value, filters[config.filter], sizeof r->value);
         break;
     }
     case SEC_GAME:
@@ -273,6 +282,25 @@ static void build_rows(void)
         r = add(ROW_CHOICE, R_LANGUAGE, "Language", "The CD's games. From the next restart (System).");
         SDL_strlcpy(r->value, gamedata_language_label(shown_language()), sizeof r->value);
         r->enabled = (languages() & (languages() - 1)) != 0;  // more than one
+        // The adaptive threat improvement's (game/adaptive.h); the rest of its numbers are [adaptive].
+        static const char *const levels[] = {"Easy", "Normal", "Hard"};
+        r = add(ROW_CHOICE, R_THREAT_LEVEL, "Threat level",
+                "Adaptive threat: how strong the alien waves are against yours. Easy, Normal, Hard.");
+        SDL_strlcpy(r->value, levels[config.adaptive.level], sizeof r->value);
+        r = add(ROW_TOGGLE, R_WARN_LAUNCH, "Wave warning",
+                "Adaptive threat: a message when an alien fleet sets off.");
+        r->on = config.adaptive.warn_on_launch;
+        r = add(ROW_TOGGLE, R_WARN_INTEL, "Early warning",
+                "Adaptive threat: a message 100-200 h before, with an observatory or satellite at their home (a contract warns always).");
+        r->on = config.adaptive.warn_intel;
+        // The autosave improvement's (game/autosave.h).
+        r = add(ROW_CHOICE, R_AUTOSAVE_MINUTES, "Autosave every",
+                "Autosave: also every few minutes of play, never in a battle or a talk.");
+        if (config.autosave_minutes > 0)
+            SDL_snprintf(r->value, sizeof r->value, "%d min", config.autosave_minutes);
+        else
+            SDL_strlcpy(r->value, "Never", sizeof r->value);
+        r->enabled = config_improvement("autosave");
         break;
     case SEC_IMPROVEMENTS:
         add(ROW_ACTION, R_IMPROVEMENTS_ON, "All on", "Changes to the original game's design.");
@@ -282,6 +310,9 @@ static void build_rows(void)
             const MenuSwitch *f = &hooks.improvements[i];
             r = add(ROW_TOGGLE, R_IMPROVEMENT + i, f->label, f->help);
             r->on = config_improvement(f->key);
+            // Raids need the adaptive threat: without it the row is greyed.
+            if (SDL_strcmp(f->key, "raids") == 0 && !config_improvement("adaptive_threat"))
+                r->enabled = false;
             port_saves |= r->on && f->port_saves;
         }
         if (port_saves && row_count + 2 <= MAX_ROWS) {
@@ -428,6 +459,10 @@ static void act(const Row *r, int dir)
     case R_SIZE:
         change_size(dir ? dir : 1);
         break;
+    case R_FILTER:
+        config.filter = step(config.filter, dir ? dir : 1, CONFIG_FILTER_SHARP, CONFIG_FILTER_CRT, true);
+        vid_apply_filter();
+        break;
     case R_SKIP_INTRO:
         config.skip_intro = !config.skip_intro;
         break;
@@ -460,6 +495,29 @@ static void act(const Row *r, int dir)
         config.language = l;
         break;
     }
+    case R_AUTOSAVE_MINUTES: {
+        static const int minutes[] = {0, 3, 5, 10, 15};
+        int n = (int)SDL_arraysize(minutes), d = dir ? dir : 1, i = 0;
+        while (i < n - 1 && minutes[i] < config.autosave_minutes)
+            i++;
+        // A number from reunion.ini between two: a step lands on the nearer one that way.
+        if (minutes[i] > config.autosave_minutes && d > 0)
+            i--;
+        else if (minutes[i] < config.autosave_minutes && d < 0)
+            i++;
+        i = step(i, d, 0, n - 1, true);
+        config.autosave_minutes = minutes[i];
+        break;
+    }
+    case R_THREAT_LEVEL:
+        config.adaptive.level = (ConfigLevel)step(config.adaptive.level, dir ? dir : 1, 0, 2, true);
+        break;
+    case R_WARN_LAUNCH:
+        config.adaptive.warn_on_launch = !config.adaptive.warn_on_launch;
+        break;
+    case R_WARN_INTEL:
+        config.adaptive.warn_intel = !config.adaptive.warn_intel;
+        break;
     case R_IMPORT:
         importscreen_run(true);
         vid_set_overlay(menu_draw);

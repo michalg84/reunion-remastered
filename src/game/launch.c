@@ -3,6 +3,7 @@
 #include "game/groups.h"
 #include "game/intel.h"
 #include "game/lang.h"
+#include "game/raid.h"
 #include "game/routes.h"
 #include "game/sound.h"
 #include "game/system.h"
@@ -123,7 +124,9 @@ void Launch_MapScreen(void)
                 && (int8_t)RACE_STATE((int8_t)body->Owner) < 6)
                 ds.Launch_InvadeIcon = g->Kind == 1 ? 1 : 0;
         } else {
-            ds.Launch_SavedBody = RACE_MOON(SYS_VIEW(e).Kind - 3, SYS_VIEW(e).Index) + 1;
+            ds.Launch_SavedBody = (SYS_VIEW(e).Index >= RAID_ENTRY ? Raid_Fleet(SYS_VIEW(e).Index - RAID_ENTRY)->moon
+                                                                    : RACE_MOON(SYS_VIEW(e).Kind - 3, SYS_VIEW(e).Index))
+                                  + 1;
             if (anyFighter && (int8_t)RACE_STATE(SYS_VIEW(e).Kind - 3) < 6)
                 ds.Launch_AttackIcon = 1;
             else
@@ -199,6 +202,12 @@ void Launch_MapScreen(void)
         if (ds.Game_StaffExp[2] == 0) {
             MSG(" You haven't got a fighter! ");
         } else {
+            if (SYS_VIEW(ds.Launch_SelectedEntry).Index >= RAID_ENTRY) {
+                // Improvement (game/raid.h): the raiders' fleet in orbit.
+                if (!Raid_PlayerAttack(SYS_VIEW(ds.Launch_SelectedEntry).Index - RAID_ENTRY))
+                    MSG(" The enemy fleet is not there! ");
+                return;
+            }
             RACE_STATE(SYS_VIEW(ds.Launch_SelectedEntry).Kind - 3) = 2;
             ds.SpWar_BattleSystem = ds.Game_CurSystem;
             ds.SpWar_BattlePlanet = CUR_PLANET;

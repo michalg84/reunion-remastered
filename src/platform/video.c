@@ -32,22 +32,52 @@ static bool have_focus;
 // What Alt+Enter goes back to from a window.
 static ConfigDisplay last_fullscreen = CONFIG_DESKTOP;
 
+// The filter applies to mode 13h only; mode 12h (the cut-scenes) stays sharp.
+static ConfigFilter active_filter(void)
+{
+    return mode == VID_MODE_12H ? CONFIG_FILTER_SHARP : config.filter;
+}
+
+// How many times the frame is enlarged in software before the renderer
+// stretches it to the window.
+static int filter_factor(ConfigFilter f)
+{
+    switch (f) {
+    case CONFIG_FILTER_SCALE2X:
+        return 2;
+    case CONFIG_FILTER_CRT:
+        return 3;
+    default:
+        return 1;
+    }
+}
+
 static bool make_texture(void)
 {
     SDL_DestroyTexture(texture);
     texture = nullptr;
-    int w = mode == VID_MODE_12H ? VID12_WIDTH : VID_WIDTH;
-    int h = mode == VID_MODE_12H ? VID12_HEIGHT : VID_HEIGHT;
-    SDL_SetRenderLogicalPresentation(renderer, w, w * 3 / 4, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+    int k = filter_factor(active_filter());
+    int lw = mode == VID_MODE_12H ? VID12_WIDTH : VID_WIDTH;
+    int w = lw * k;
+    int h = (mode == VID_MODE_12H ? VID12_HEIGHT : VID_HEIGHT) * k;
+    SDL_SetRenderLogicalPresentation(renderer, lw, lw * 3 / 4, SDL_LOGICAL_PRESENTATION_LETTERBOX);
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XRGB8888,
                                 SDL_TEXTUREACCESS_STREAMING, w, h);
     if (!texture) {
         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Texture: %s", SDL_GetError());
         return false;
     }
-    // Keeps pixels sharp under the non-integer line stretch.
-    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_PIXELART);
+    // Pixel-art mode keeps pixels sharp under the non-integer line stretch.
+    SDL_SetTextureScaleMode(texture, active_filter() == CONFIG_FILTER_SMOOTH
+                                         ? SDL_SCALEMODE_LINEAR
+                                         : SDL_SCALEMODE_PIXELART);
     return true;
+}
+
+void vid_apply_filter(void)
+{
+    if (renderer)
+        make_texture();
 }
 
 void vid_set_mode(VidMode m)
@@ -177,9 +207,82 @@ static void draw_focus(void)
     SDL_RenderRect(renderer, &r);
 }
 
-void vid_present(void)
+// Scale2x (AdvanceMAME): each pixel becomes 2x2, taking a neighbour's colour
+// where two neighbours agree and the others do not, which rounds diagonals
+// without blending colours.
+static void scale2x(const uint32_t *src, uint32_t *dst, int pitch_px)
 {
-    uint32_t lut[256];
+    for (int y = 0; y < VID_HEIGHT; y++) {
+        const uint32_t *row = src + y * VID_WIDTH;
+        const uint32_t *up = y > 0 ? row - VID_WIDTH : row;
+        const uint32_t *dn = y < VID_HEIGHT - 1 ? row + VID_WIDTH : row;
+        uint32_t *d0 = dst + 2 * y * pitch_px, *d1 = d0 + pitch_px;
+        for (int x = 0; x < VID_WIDTH; x++) {
+            uint32_t b = up[x], d = row[x > 0 ? x - 1 : x], e = row[x];
+            uint32_t f = row[x < VID_WIDTH - 1 ? x + 1 : x], h = dn[x];
+            uint32_t e0 = e, e1 = e, e2 = e, e3 = e;
+            if (b != h && d != f) {
+                e0 = d == b ? d : e;
+                e1 = b == f ? f : e;
+                e2 = d == h ? d : e;
+                e3 = h == f ? f : e;
+            }
+            d0[2 * x] = e0;
+            d0[2 * x + 1] = e1;
+            d1[2 * x] = e2;
+            d1[2 * x + 1] = e3;
+        }
+    }
+}
+
+static uint32_t dim(uint32_t c, int pct)
+{
+    uint32_t r = (c >> 16 & 255) * pct / 100, g = (c >> 8 & 255) * pct / 100,
+             b = (c & 255) * pct / 100;
+    return r << 16 | g << 8 | b;
+}
+
+// CRT: each pixel 3x3, the bottom row of the three dimmed to 55% (the scan
+// line's gap), the right column a little (the phosphor's).
+static void crt3x(const uint32_t *src, uint32_t *dst, int pitch_px)
+{
+    for (int y = 0; y < VID_HEIGHT; y++) {
+        uint32_t *d0 = dst + 3 * y * pitch_px, *d1 = d0 + pitch_px, *d2 = d1 + pitch_px;
+        for (int x = 0; x < VID_WIDTH; x++) {
+            uint32_t c = src[y * VID_WIDTH + x], side = dim(c, 85);
+            uint32_t low = dim(c, 55), lowside = dim(c, 47);
+            d0[3 * x] = d1[3 * x] = c;
+            d0[3 * x + 1] = d1[3 * x + 1] = c;
+            d0[3 * x + 2] = d1[3 * x + 2] = side;
+            d2[3 * x] = low;
+            d2[3 * x + 1] = low;
+            d2[3 * x + 2] = lowside;
+        }
+    }
+}
+
+static void present_13h(const uint32_t lut[256], void *pixels, int pitch, ConfigFilter f)
+{
+    static uint32_t base[VID_WIDTH * VID_HEIGHT];
+    if (f == CONFIG_FILTER_SHARP || f == CONFIG_FILTER_SMOOTH) {
+        for (int y = 0; y < VID_HEIGHT; y++) {
+            uint32_t *row = (uint32_t *)((uint8_t *)pixels + y * pitch);
+            for (int x = 0; x < VID_WIDTH; x++)
+                row[x] = lut[vid_screen[y][x]];
+        }
+        return;
+    }
+    for (int y = 0; y < VID_HEIGHT; y++)
+        for (int x = 0; x < VID_WIDTH; x++)
+            base[y * VID_WIDTH + x] = lut[vid_screen[y][x]];
+    if (f == CONFIG_FILTER_SCALE2X)
+        scale2x(base, pixels, pitch / 4);
+    else
+        crt3x(base, pixels, pitch / 4);
+}
+
+static void make_lut(uint32_t lut[256])
+{
     for (int i = 0; i < 256; i++) {
         // Expand 6-bit DAC values to 8 bits.
         uint32_t r = vid_palette[i][0] & 63;
@@ -190,6 +293,12 @@ void vid_present(void)
         b = b << 2 | b >> 4;
         lut[i] = r << 16 | g << 8 | b;
     }
+}
+
+void vid_present(void)
+{
+    uint32_t lut[256];
+    make_lut(lut);
 
     void *pixels;
     int pitch;
@@ -201,11 +310,7 @@ void vid_present(void)
                     row[x] = lut[vid_attr[vid12_screen[y][x] & 15]];
             }
         } else {
-            for (int y = 0; y < VID_HEIGHT; y++) {
-                uint32_t *row = (uint32_t *)((uint8_t *)pixels + y * pitch);
-                for (int x = 0; x < VID_WIDTH; x++)
-                    row[x] = lut[vid_screen[y][x]];
-            }
+            present_13h(lut, pixels, pitch, active_filter());
         }
         SDL_UnlockTexture(texture);
     }
@@ -331,8 +436,34 @@ SDL_Window *vid_window(void)
     return window;
 }
 
+// The mode 13h frame as the filter enlarges it (what the window shows before the
+// renderer's own stretch), for looking at a filter without a screen.
+static bool save_filtered(const char *path, ConfigFilter f)
+{
+    int k = filter_factor(f);
+    SDL_Surface *s = SDL_CreateSurface(VID_WIDTH * k, VID_HEIGHT * k, SDL_PIXELFORMAT_XRGB8888);
+    if (!s)
+        return false;
+    uint32_t lut[256];
+    make_lut(lut);
+    present_13h(lut, s->pixels, s->pitch, f);
+    bool ok = SDL_SavePNG(s, path);
+    if (!ok)
+        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Saving %s: %s", path, SDL_GetError());
+    SDL_DestroySurface(s);
+    return ok;
+}
+
 bool vid_save_image(const char *path)
 {
+    // Testing aid: REUNION_DUMP_FILTER=sharp|smooth|scale2x|crt saves a PNG as that filter draws it.
+    const char *want = SDL_getenv("REUNION_DUMP_FILTER");
+    if (want && mode == VID_MODE_13H) {
+        static const char *const names[] = {"sharp", "smooth", "scale2x", "crt"};
+        for (int i = 0; i < 4; i++)
+            if (SDL_strcasecmp(want, names[i]) == 0)
+                return save_filtered(path, (ConfigFilter)i);
+    }
     bool m12 = mode == VID_MODE_12H;
     int w = m12 ? VID12_WIDTH : VID_WIDTH, h = m12 ? VID12_HEIGHT : VID_HEIGHT;
     SDL_Surface *s = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_INDEX8);

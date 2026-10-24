@@ -3,13 +3,21 @@
 #include <SDL3/SDL.h>
 #include <string.h>
 
+#include "game/adaptive.h"
 #include "game/blit.h"
 #include "game/gfx.h"
+#include "game/improvements.h"
 #include "game/lang.h"
 #include "game/mouse.h"
 #include "game/sound.h"
 #include "game/system.h"
 #include "game/textfile.h"
+
+// Rows of the talk window.
+enum : int { PUB_WINDOW_ROWS = 7 };
+
+// The menu the talk started in (Pub_NoteEntryMenu).
+static int16_t entry_menu = -1;
 
 // Routines missing from their units' headers.
 bool Intel_IsRaceActive(int16_t race);  // 29b9:1461
@@ -178,6 +186,57 @@ void Pub_ShowReply(void)
     TextFile_DrawReply(line, 6, 0x86, 0x24, false, true, &ds.Pub_MenuIdx, &lines);
 }
 
+void Pub_NoteEntryMenu(void)
+{
+    entry_menu = ds.Pub_MenuIdx;
+}
+
+bool Pub_IsContractItem(int16_t item)
+{
+    return item >= PUB_CONTRACT_ITEM + 2 && item <= PUB_CONTRACT_ITEM + 12;
+}
+
+// The line offering the contract for `race`: code, then the text.
+static void contract_line(char *out, size_t size, int16_t race)
+{
+    char label[32];
+    // A row of the talk window holds 36 characters.
+    SDL_snprintf(out, size, "%02d Pay %d credits for good|and I'll warn you of the %s.", 0,
+                 (int)Adaptive_ContractPrice(race), Adaptive_RaceLabel(race, label, sizeof label));
+}
+
+// Up to two contract lines after the person's own, if the menu has room
+// (a menu holds five questions) and is the one the talk started in; the
+// ones that don't fit the window's seven rows are dropped when it is built.
+static void add_contract_items(TMenu *m)
+{
+    if (!improvements.adaptive_threat || ds.Pub_MenuIdx != entry_menu)
+        return;
+    for (int16_t race = 2, added = 0; race <= 12 && added < 2 && m->Count < 5; race++) {
+        if (Adaptive_Seller(race) == ds.Pub_Person && Adaptive_ContractOffered(race)) {
+            m->Items[m->Count++] = (int8_t)(PUB_CONTRACT_ITEM + race);
+            added++;
+        }
+    }
+}
+
+void Pub_ContractAnswer(int16_t item)
+{
+    int16_t race = (int16_t)(item - PUB_CONTRACT_ITEM), lines;
+    char label[32], line[256];
+    int32_t price = Adaptive_ContractPrice(race);
+    if (Adaptive_BuyContract(race))
+        SDL_snprintf(line, sizeof line, "%02d Done. I'll watch the %s|and tell you before they strike.",
+                     (int)entry_menu, Adaptive_RaceLabel(race, label, sizeof label));
+    else
+        SDL_snprintf(line, sizeof line, "%02d That is %d credits, friend.|Come back when you have them.",
+                     (int)entry_menu, (int)price);
+    Mouse_HideCursor();
+    Blit_FillRect(6, 0x86, 0xD8, 0x3F, 0x40);
+    Mouse_ShowCursor();
+    TextFile_DrawReply(line, 6, 0x86, 0x24, false, true, &ds.Pub_MenuIdx, &lines);
+}
+
 // 1fd2:0788
 void Pub_BuildQuestionMenu(void)
 {
@@ -210,11 +269,21 @@ void Pub_BuildQuestionMenu(void)
             }
         }
     }
+    add_contract_items(m);
     uint16_t n = m->Count;
     for (uint16_t i = 1; i <= n && n != 0; i++) {
         char name[32];
-        TextFile_ReadTextLine(person_file(name, "kerdes", ".loc"), m->Items[i - 1], line_at(i),
-                              256);
+        if (Pub_IsContractItem(m->Items[i - 1])) {
+            contract_line(line_at(i), 256, (int16_t)(m->Items[i - 1] - PUB_CONTRACT_ITEM));
+            if (ds.Pub_LineCount + TextFile_CountLines(line_at(i)) > PUB_WINDOW_ROWS) {
+                m->Count = (uint8_t)(i - 1);  // no room: the rest are contracts too
+                n = m->Count;
+                break;
+            }
+        } else {
+            TextFile_ReadTextLine(person_file(name, "kerdes", ".loc"), m->Items[i - 1], line_at(i),
+                                  256);
+        }
         lines = TextFile_CountLines(line_at(i));
         for (int16_t j = (int16_t)(ds.Pub_LineCount + 1); j <= ds.Pub_LineCount + lines; j++)
             *line_item(j) = (uint8_t)i;
