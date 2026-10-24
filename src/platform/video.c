@@ -281,9 +281,8 @@ static void present_13h(const uint32_t lut[256], void *pixels, int pitch, Config
         crt3x(base, pixels, pitch / 4);
 }
 
-void vid_present(void)
+static void make_lut(uint32_t lut[256])
 {
-    uint32_t lut[256];
     for (int i = 0; i < 256; i++) {
         // Expand 6-bit DAC values to 8 bits.
         uint32_t r = vid_palette[i][0] & 63;
@@ -294,6 +293,12 @@ void vid_present(void)
         b = b << 2 | b >> 4;
         lut[i] = r << 16 | g << 8 | b;
     }
+}
+
+void vid_present(void)
+{
+    uint32_t lut[256];
+    make_lut(lut);
 
     void *pixels;
     int pitch;
@@ -431,8 +436,34 @@ SDL_Window *vid_window(void)
     return window;
 }
 
+// The mode 13h frame as the filter enlarges it (what the window shows before the
+// renderer's own stretch), for looking at a filter without a screen.
+static bool save_filtered(const char *path, ConfigFilter f)
+{
+    int k = filter_factor(f);
+    SDL_Surface *s = SDL_CreateSurface(VID_WIDTH * k, VID_HEIGHT * k, SDL_PIXELFORMAT_XRGB8888);
+    if (!s)
+        return false;
+    uint32_t lut[256];
+    make_lut(lut);
+    present_13h(lut, s->pixels, s->pitch, f);
+    bool ok = SDL_SavePNG(s, path);
+    if (!ok)
+        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Saving %s: %s", path, SDL_GetError());
+    SDL_DestroySurface(s);
+    return ok;
+}
+
 bool vid_save_image(const char *path)
 {
+    // Testing aid: REUNION_DUMP_FILTER=sharp|smooth|scale2x|crt saves a PNG as that filter draws it.
+    const char *want = SDL_getenv("REUNION_DUMP_FILTER");
+    if (want && mode == VID_MODE_13H) {
+        static const char *const names[] = {"sharp", "smooth", "scale2x", "crt"};
+        for (int i = 0; i < 4; i++)
+            if (SDL_strcasecmp(want, names[i]) == 0)
+                return save_filtered(path, (ConfigFilter)i);
+    }
     bool m12 = mode == VID_MODE_12H;
     int w = m12 ? VID12_WIDTH : VID_WIDTH, h = m12 ? VID12_HEIGHT : VID_HEIGHT;
     SDL_Surface *s = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_INDEX8);
