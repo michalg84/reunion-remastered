@@ -7,6 +7,7 @@
 
 #include <SDL3/SDL.h>
 
+#include "game/adaptive.h"
 #include "game/advisor.h"
 #include "game/alientalk.h"
 #include "game/anim.h"
@@ -17,6 +18,7 @@
 #include "game/command.h"
 #include "game/courses.h"
 #include "game/credits.h"
+#include "game/defence.h"
 #include "game/droids.h"
 #include "game/dseg.h"
 #include "game/evlog.h"
@@ -40,6 +42,7 @@
 #include "game/planetlist.h"
 #include "game/portcmd.h"
 #include "game/protect.h"
+#include "game/raid.h"
 #include "game/pub.h"
 #include "game/rawtext.h"
 #include "game/research.h"
@@ -85,9 +88,9 @@ static inline TBuilding *building(int16_t i)
 }
 
 // Surface::BuildingTypes[k].
-static inline TBuildingType *building_type(int16_t k)
+static inline const TBuildingType *building_type(int16_t k)
 {
-    return &ds.Surface_BuildingTypes[k - 1];
+    return Defence_Type(k);
 }
 
 static void add_credits(int32_t d)
@@ -305,6 +308,8 @@ static void startup(void)
     Autosave_Reset();  // port improvement (game/autosave.h)
     StoreFull_Reset();  // port improvement (game/storefull.h)
     Courses_Reset();  // port improvement (game/courses.h)
+    Adaptive_Reset();  // port improvement (game/adaptive.h)
+    Raid_Reset();  // port improvement (game/raid.h)
     if (ds.Game_StartChoice == 2) {
         ds.Game_PrevScreen = 1;
         ds.Game_CurrentScreen = 12;
@@ -340,6 +345,7 @@ static void advance_hour(bool held)
     Sim_ProcessTravellingGroups();
     Routes_Hour();  // port improvement (game/routes.h)
     Sim_CheckEnemyAttacks();
+    Raid_Hour();  // port improvement (game/raid.h)
     Sim_ProcessPubTimers();
     ds.Game_Ticks = 0;
     Gfx_DrawCredits();
@@ -716,7 +722,8 @@ static bool build_again(void)
 {
     return improvements.repeat_build && input_shift()
            && building_type(ds.Surface_SelKind)->Cost <= ds.Game_Credits
-           && ds.Game_BuildingCount < Game_BuildingLimit();
+           && ds.Game_BuildingCount < Game_BuildingLimit()
+           && Defence_CanPlace(ds.Surface_SelKind, CUR_SYS, CUR_PLANET(CUR_SYS), CUR_MOON(CUR_SYS));
 }
 
 // Clicks on the map (hotspot 0x15) with the left button: place, select or
@@ -730,6 +737,11 @@ static void surface_map_click(void)
             && ds.Game_BuildingCount >= Game_BuildingLimit()) {
             // The original refuses the building (Surface_BuildOnCurrentPlanet)
             // and charges it all the same. Port fix: refused, nothing paid.
+            Sound_PlayButtonSfx("x");
+            ds.Mouse_HeldPhase = 1;
+        } else if (ds.Surface_Mode == 2
+                   && !Defence_CanPlace(ds.Surface_SelKind, CUR_SYS, CUR_PLANET(CUR_SYS), CUR_MOON(CUR_SYS))) {
+            // Improvement (game/defence.h): the body has all of this kind it takes.
             Sound_PlayButtonSfx("x");
             ds.Mouse_HeldPhase = 1;
         } else if (ds.Surface_Mode == 2) {
@@ -807,6 +819,9 @@ static bool kind_selectable(int16_t k)
     if (k == 4 && body->Mineable == 0)
         return false;
     if (k == 5 && (body->Mineable == 0 || body->Deposits[0] < 10))
+        return false;
+    if (k > Defence_KindCount()
+        || !Defence_CanPlace(k, CUR_SYS, CUR_PLANET(CUR_SYS), CUR_MOON(CUR_SYS)))
         return false;
     const TBuildingType *bt = building_type(k);
     if (bt->NeedProduct == 0) {
@@ -942,7 +957,7 @@ static void screen_surface(void)
                     ds.Surface_SelKind = (int16_t)ds.Main_I;
         } else {
             int16_t last = (int16_t)(ds.Surface_SelKind + 1);
-            for (ds.Main_I = 0x19; ds.Main_I >= last; ds.Main_I--)
+            for (ds.Main_I = Defence_KindCount(); ds.Main_I >= last; ds.Main_I--)
                 if (kind_selectable((int16_t)ds.Main_I))
                     ds.Surface_SelKind = (int16_t)ds.Main_I;
         }
@@ -1085,6 +1100,7 @@ void Game_PickPubMenu(void)
 static void pub_dialog_enter(void)
 {
     Game_PickPubMenu();
+    Pub_NoteEntryMenu();  // port improvement (game/adaptive.h)
     Pub_LoadPersonPortrait();
     Pub_BuildQuestionMenu();
     Pub_DrawQuestionMenu();
@@ -1269,10 +1285,14 @@ static void screen_pub_dialog(void)
             // sixth in ItemQty[1] (1fd2:0788), so index the bytes.
             ds.Pub_QuestionLine = ((const int8_t *)&ds.Pub_CurMenu)[ds.Pub_HoverItem];
             ds.Pub_HoverItem = 0;
-            Pub_ReadQuestionCode();
-            ds.Pub_ReplyLine = ds.Pub_QuestionCode;
-            pub_answer();
-            Pub_ShowReply();
+            if (Pub_IsContractItem(ds.Pub_QuestionLine)) {
+                Pub_ContractAnswer(ds.Pub_QuestionLine);  // port improvement (game/adaptive.h)
+            } else {
+                Pub_ReadQuestionCode();
+                ds.Pub_ReplyLine = ds.Pub_QuestionCode;
+                pub_answer();
+                Pub_ShowReply();
+            }
             ds.Pub_Replied = 1;
             ds.Game_HotspotHit = 0;
             ds.Mouse_HeldPhase = 1;
@@ -1336,25 +1356,27 @@ static void screen_space_battle(void)
             Intel_SpaceBattleLost(ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet);
         else
             Intel_SpaceBattleWon(ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet);
+        // Improvement (game/raid.h): a raid's battle has nothing to do with the story.
+        bool raid_battle = Raid_BattleOver(ds.SpWar_PlayerWon);
         select_battle_body();
         if (ds.Sim_PlayerAttacks)
             ds.Game_CurrentScreen = ds.SpWar_GroundBattle == 0 || !ds.SpWar_PlayerWon ? 7 : 19;
         if (ds.Sim_PlayerAttacks == 0)
             ds.Game_CurrentScreen = ds.SpWar_GroundBattle == 0 || ds.SpWar_PlayerWon ? 7 : 19;
         ds.Game_ScreenSwitch = 1;
-        if (ds.SpWar_PlayerWon && ds.Intel_FirstBattleWon == 0) {
+        if (ds.SpWar_PlayerWon && !raid_battle && ds.Intel_FirstBattleWon == 0) {
             ds.Intel_FirstBattleWon = 1;
             Intel_ScheduleIdea(0xD, 0x14, 0x14);
             Intel_ScheduleIdea(0x11, 0x5A, 0x32);
         }
-        if (ds.SpWar_PlayerWon && ds.Intel_MorgrulAttack2Open) {
+        if (ds.SpWar_PlayerWon && !raid_battle && ds.Intel_MorgrulAttack2Open) {
             ds.Intel_MorgrulAttack2Open = 0;
             Intel_ScheduleIdea(0x12, 3, 0);
             Message_ShowMessageLine(0x10);
             AlienTalk_StartAlienScene(3);
             ds.Game_StoryStage = 3;
         }
-        if (ds.SpWar_PlayerWon && ds.Intel_MorgrulAttack3Open) {
+        if (ds.SpWar_PlayerWon && !raid_battle && ds.Intel_MorgrulAttack3Open) {
             ds.Intel_MorgrulAttack3Open = 0;
             Message_ShowMessageLine(0x13);
             ds.Pub_People[1].State = 2;
@@ -1364,7 +1386,7 @@ static void screen_space_battle(void)
             AlienTalk_StartAlienScene(3);
             ds.Game_StoryStage = 4;
         }
-        if (ds.SpWar_PlayerWon && ds.SpWar_BattleSystem == 8)
+        if (ds.SpWar_PlayerWon && !raid_battle && ds.SpWar_BattleSystem == 8)
             ds.Pub_People[9].State = 2;
     }
 }

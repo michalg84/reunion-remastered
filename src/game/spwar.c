@@ -6,6 +6,7 @@
 
 #include "game/anim.h"
 #include "game/blit.h"
+#include "game/defence.h"
 #include "game/evlog.h"
 #include "game/fixes.h"
 #include "game/gfx.h"
@@ -14,6 +15,7 @@
 #include "game/groups.h"
 #include "game/mouse.h"
 #include "game/planetinfo.h"
+#include "game/raid.h"
 #include "game/sound.h"
 #include "game/system.h"
 #include "platform/fs.h"
@@ -203,6 +205,15 @@ void SpWar_InitSpaceFleets(void)
         }
     }
 
+    // Improvement (game/defence.h): the batteries of this planet fight too.
+    for (int i = 0; i < 2; i++) {
+        const DefenceUnit *u = &Defence_Units[i];
+        int16_t n = Defence_Fighting(u, ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet);
+        for (int16_t a = 0; a < n && (uint16_t)ds.SpWar_AttackerShipCount < 500; a++)
+            add_ship(ds.SpWar_AttackerList, &ds.SpWar_AttackerShipCount, u->id, u->cls, u->dmg,
+                     u->hp, false);
+    }
+
     // Buildings (race forces) at this planet.
     ds.SpWar_DefenderShipCount = 0;
     for (int16_t r = 2; r <= 12; r++) {
@@ -228,6 +239,15 @@ void SpWar_InitSpaceFleets(void)
                 }
             }
         }
+    }
+
+    // Improvement (game/raid.h): the raid fleet of this battle.
+    if (Raid_BattleActive()) {
+        const RaidFleet *rf = Raid_BattleFleet();
+        for (int c = 0; c < 2; c++)
+            for (int n = 0; n < rf->units[c] && (uint16_t)ds.SpWar_DefenderShipCount < 500; n++)
+                add_ship(ds.SpWar_DefenderList, &ds.SpWar_DefenderShipCount, RAID_SHIP_ID, (uint8_t)(c + 1),
+                         (uint16_t)ds.SpWar_ClassB[c], (uint16_t)ds.SpWar_ClassA[c], true);
     }
 
     // Planet and moons: the store ships of their owners.
@@ -520,14 +540,24 @@ static void step_side(uint8_t *own, int16_t ownCount, uint8_t *foe, int16_t *foe
         }
         int16_t t = (int16_t)(System_Random((uint16_t)*foeCount) + 1);
         SpShip *tg = Ship(foe, t);
-        if (System_Random(100) < 11) {
-            if (s->cls < 3 && tg->cls > 2)
+        // Batteries (game/defence.h) fire and are hit by their own rules; every
+        // other ship by the original's.
+        const DefenceUnit *su = Defence_UnitOfId(s->id), *tu = Defence_UnitOfId(tg->id);
+        bool small_shot = s->cls < 3 && !(su && su->large);
+        if (System_Random(100) < (su ? su->hit : 11)) {
+            // A shielded battery: some of the enemy's shots are lost.
+            if (tu && defender && Defence_Shielded(ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet)
+                && System_Random(100) < DEFENCE_SHIELD_MISS)
+                continue;
+            if (small_shot && tg->cls > 2)
                 tg->hp = (int16_t)(tg->hp - s->dmg / 3);
             else
                 tg->hp = (int16_t)(tg->hp - s->dmg);
-            if (s->cls < 3 && tg->cls < 3) {
+            if (small_shot && tg->cls < 3) {
                 uint16_t r = System_Random(100);
                 int16_t chance = ds.SpWar_KillChance[s->cls - 1][tg->cls - 1];
+                if (tu && System_Random(100) >= tu->kill)
+                    chance = -1;
                 if (chance >= 0 && r <= (uint16_t)chance)
                     tg->hp = 0;
             }
@@ -542,6 +572,26 @@ static void step_side(uint8_t *own, int16_t ownCount, uint8_t *foe, int16_t *foe
             }
         }
     }
+}
+
+// Improvement (game/raid.h): a raid that has lost half its weight turns
+// back. Its ships leave the battle (no explosion: a position past the
+// frames), the fight is over.
+static void raid_retreat(void)
+{
+    if (!Raid_BattleActive())
+        return;
+    int32_t alive[2] = {0, 0};
+    for (int16_t i = 1; i <= ds.SpWar_DefenderShipCount; i++) {
+        const SpShip *s = Ship(ds.SpWar_DefenderList, i);
+        if (s->id == RAID_SHIP_ID && s->hp > 0 && s->cls >= 1 && s->cls <= 2)
+            alive[s->cls - 1]++;
+    }
+    if (!Raid_RetreatCheck(alive))
+        return;
+    for (int16_t i = 1; i <= ds.SpWar_DefenderShipCount; i++)
+        Ship(ds.SpWar_DefenderList, i)->pos = 0xFF;
+    ds.SpWar_DefenderShipCount = 0;
 }
 
 // Explosion frames of the ships lost (the end of the list from the live count).
@@ -573,6 +623,7 @@ void SpWar_StepSpaceBattle(void)
               &ds.SpWar_DefenderShipCount, false);
     step_side(ds.SpWar_DefenderList, ds.SpWar_DefenderShipCount, ds.SpWar_AttackerList,
               &ds.SpWar_AttackerShipCount, true);
+    raid_retreat();
     draw_explosions(ds.SpWar_AttackerList, ds.SpWar_AttackerShipCount, ds.SpWar_AttackerStart);
     draw_explosions(ds.SpWar_DefenderList, ds.SpWar_DefenderShipCount, ds.SpWar_DefenderStart);
     Mouse_HideCursor();
@@ -634,6 +685,30 @@ void SpWar_ApplySpaceLosses(void)
                 ds.SpWar_AttackerLosses[j - 1] += orig - now;
                 sl->Count = (int16_t)now;
             }
+        }
+    }
+
+    // Improvement (game/raid.h): the raid fleet is what is left of it.
+    if (Raid_BattleActive()) {
+        int32_t alive[2], lost[4] = {0, 0, 0, 0};
+        alive[0] = count_alive(ds.SpWar_DefenderList, ds.SpWar_DefenderShipCount, RAID_SHIP_ID, 1);
+        alive[1] = count_alive(ds.SpWar_DefenderList, ds.SpWar_DefenderShipCount, RAID_SHIP_ID, 2);
+        Raid_ApplyLosses(alive, lost);
+        for (int c = 0; c < 4; c++)
+            ds.SpWar_DefenderLosses[c] += lost[c];
+    }
+
+    // Improvement (game/defence.h): the batteries that fell are demolished.
+    for (int i = 0; i < 2; i++) {
+        const DefenceUnit *u = &Defence_Units[i];
+        // Those that joined (a full fleet takes no more), not all that stand.
+        int16_t joined = (int16_t)count_alive(ds.SpWar_AttackerList, ds.SpWar_AttackerStart, u->id, u->cls);
+        int16_t had = SDL_min(joined, Defence_Fighting(u, ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet));
+        int16_t lost = (int16_t)(had - count_alive(ds.SpWar_AttackerList, ds.SpWar_AttackerShipCount,
+                                                   u->id, u->cls));
+        if (lost > 0) {
+            ds.SpWar_AttackerLosses[u->cls - 1] += lost;
+            Defence_Demolish(u, ds.SpWar_BattleSystem, ds.SpWar_BattlePlanet, lost);
         }
     }
 

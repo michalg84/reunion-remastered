@@ -1,3 +1,4 @@
+#include "game/adaptive.h"
 #include "game/improvements.h"
 
 #include <SDL3/SDL.h>
@@ -31,6 +32,15 @@ const SwitchInfo Improvements_List[] = {
     {"university_courses", "Universities count",
      "Courses need a University; one staff member away per University.",
      &improvements.university_courses},
+    {"adaptive_threat", "Adaptive threat",
+     "Alien waves match your strength; warnings. Saves then won't load in DOS.",
+     &improvements.adaptive_threat},
+    {"planetary_defence", "Planetary defence",
+     "Ion cannon and Twin laser battery fight in battles. 1 Ion per body.",
+     &improvements.planetary_defence},
+    {"raids", "Raids",
+     "Raids, blockades, scouts. Needs Adaptive threat. Not for DOS saves.",
+     &improvements.raids},
 };
 
 const int Improvements_Count = (int)SDL_arraysize(Improvements_List);
@@ -38,16 +48,23 @@ const int Improvements_Count = (int)SDL_arraysize(Improvements_List);
 bool Improvements_NeedsPortSaves(int i)
 {
     return Improvements_List[i].value == &improvements.trade_routes
-           || Improvements_List[i].value == &improvements.no_building_limit;
+           || Improvements_List[i].value == &improvements.no_building_limit
+           || Improvements_List[i].value == &improvements.adaptive_threat
+           || Improvements_List[i].value == &improvements.raids;
 }
 
 bool Improvements_PortSaves(void)
 {
-    return improvements.trade_routes || improvements.no_building_limit;
+    // A signed contract (game/adaptive.h) outlives the switch.
+    return improvements.trade_routes || improvements.no_building_limit || improvements.adaptive_threat
+           || improvements.raids || Adaptive_AnyContract();
 }
 
 void Improvements_Init(bool scripted)
 {
     for (int i = 0; i < Improvements_Count; i++)
         *Improvements_List[i].value = !scripted && config_improvement(Improvements_List[i].key);
+    // The timed autosave goes by real time: a replay must play the same anywhere.
+    if (scripted)
+        config.autosave_minutes = 0;
 }

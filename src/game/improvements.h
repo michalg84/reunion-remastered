@@ -44,6 +44,20 @@ typedef struct Improvements {
     // A university course needs a finished, powered University, and with N
     // of them up to N staff can be away at once (game/courses.h).
     bool university_courses;
+    // The alien waves follow the player's strength (game/adaptive.h): they
+    // wait, within limits, for a weak player and are scaled to match, and
+    // warnings come before them. Its state is a port record: saves then
+    // won't load in DOS.
+    bool adaptive_threat;
+    // The Ion cannon fights in the space battles of its planet, and so does
+    // a new building, the Twin laser battery (game/defence.h); one Ion
+    // cannon and one Energy shield to a body. Saves with a battery are in
+    // the port's format.
+    bool planetary_defence;
+    // Alien raids, blockades and scouts between the waves, on the colonies
+    // outside New Earth (game/raid.h). Needs adaptive_threat. Off until
+    // played. The raid fleets are a port record: saves then won't load in DOS.
+    bool raids;
 } Improvements;
 
 extern Improvements improvements;

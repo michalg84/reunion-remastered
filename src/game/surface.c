@@ -6,9 +6,11 @@
 
 #include "assets/map.h"
 #include "game/blit.h"
+#include "game/defence.h"
 #include "game/dseg.h"
 #include "game/fixes.h"
 #include "game/gfx.h"
+#include "game/improvements.h"
 #include "game/lang.h"
 #include "game/main_program.h"
 #include "game/minmax.h"
@@ -62,6 +64,8 @@ static TBuilding *bldg(int16_t index)
 
 static const TBuildingType *btype(int16_t kind)
 {
+    if (kind > DEFENCE_DOS_KINDS)
+        return Defence_Type(kind);  // the port's own (game/defence.h)
     return (const TBuildingType *)((const uint8_t *)ds.Surface_BuildingTypes
                                    + (uint16_t)(kind * 0x3F) - 0x3F);
 }
@@ -120,7 +124,11 @@ void Surface_EnterSurface(void)
     Gfx_LoadPic(name, ds.Surface_RadarColors, 1, 0x1A, 0, 0, 0x50, false,
                 Gfx_PalettePtr(), 0, 0x3F, 0xB0, 0, 0x3F);
 
-    ds.Surface_BufC = game_alloc(0xF000);
+    // Row 12 (tiles 240..) is the port's: the Twin laser battery's
+    // (game/defence.h), only while it can be built or one stands, so that
+    // without them memory and palette are the original's.
+    bool twin_tiles = improvements.planetary_defence || Defence_AnyBattery();
+    ds.Surface_BufC = game_alloc(twin_tiles ? 0x10400 : 0xF000);
     SDL_snprintf(name, sizeof name, "planets\\epul%s%d", ds.Game_CurBody->Owner > 1 ? "t" : "",
                  set);
     Gfx_LoadPic(name, ds.Surface_BufC, 1, 0xC0, 0, 0, 0x140, false,
@@ -140,6 +148,12 @@ void Surface_EnterSurface(void)
     SDL_snprintf(name, sizeof name, "planets\\felsz%d", set);
     Gfx_LoadPic(name, ds.Surface_BufB, 1, (uint16_t)felsz, 0, 0, 0x140,
                 false, Gfx_PalettePtr(), 0, 0x3F, 0xB0, 0, 0x3F);
+
+    if (twin_tiles) {
+        const uint8_t *used[3] = {ds.Surface_BufC, ds.Surface_BufB, ds.Surface_BufD};
+        size_t sizes[3] = {0xF000, (size_t)felsz * 0x140, fanim != 0 ? (size_t)fanim * 0x140 : 0};
+        Defence_MakeTwinTiles(ds.Surface_BufC, Gfx_PalettePtr(), used, sizes, 3);
+    }
 
     // GetMem(0x1518), 0x1518 and 0x2A30. Whole segments: x or y 0 is below
     // the layer and wraps (cell).
@@ -272,6 +286,13 @@ void Surface_SetupSimpleInfoHotspots(void)
 // Info panel and frame
 // ---------------------------------------------------------------------------
 
+// The picture of the selected kind: the Twin laser battery shows the Ion
+// cannon's, the game has none of its own.
+static int16_t picture_kind(void)
+{
+    return ds.Surface_SelKind > DEFENCE_DOS_KINDS ? DEFENCE_KIND_ION : ds.Surface_SelKind;
+}
+
 // Draws "<label><value><suffix>" in the info panel at row `row`.
 static void info_line(const char *label, const char *value, const char *suffix, int16_t row)
 {
@@ -369,7 +390,31 @@ void Surface_DrawBuildingInfo(void)
             info_line("Total      : ", s, SDL_strlen(s) > 2 ? "t/ptp" : " t/ptp", (int16_t)(row + 2));
         }
     }
+    if (ds.Surface_SelKind == DEFENCE_KIND_TWIN) {
+        // The port's own building has no lines in the game's text file.
+        static const char *const lines[6] = {
+            "TWIN LASER BATTERY", "Fights in the space battle",
+            "of its planet. Fires like", "a Starfighter but stays on",
+            "the ground. Ten to a body,", "needs the Planetary defence."};
+        Gfx_DrawTextFC(lines[0], 100, 0x86, 0x23);
+        for (int16_t i = 1; i < 6; i++)
+            Gfx_DrawTextF9(lines[i], 100, (int16_t)(i * 9 + 0x8B), 0x23);
+        return;
+    }
     TextFile_ShowBuildingInfo((int16_t)((ds.Surface_SelKind - 1) * 6));
+}
+
+// The picture of the Ion cannon and of the Twin laser battery (which shows the
+// Ion's) get a small label on the sky, to tell them apart.
+static void draw_defence_label(void)
+{
+    if (!improvements.planetary_defence)
+        return;
+    const char *label = ds.Surface_SelKind == DEFENCE_KIND_TWIN  ? "LASER"
+                        : ds.Surface_SelKind == DEFENCE_KIND_ION ? "ION"
+                                                                 : nullptr;
+    if (label)
+        Gfx_DrawTextF9(label, 230, 58, (int16_t)SDL_strlen(label));
 }
 
 // 2ef2:112c
@@ -377,7 +422,7 @@ void Surface_ShowBuildingInfoView(void)
 {
     char name[32];
     uint8_t *buf = game_alloc(0x1950);
-    SDL_snprintf(name, sizeof name, "epulet\\epulet%d", ds.Surface_SelKind);
+    SDL_snprintf(name, sizeof name, "epulet\\epulet%d", picture_kind());
     Gfx_LoadPic(name, buf, 1, 0x48, 0, 0, 0x5A, false, Gfx_PalettePtr(),
                 0, 0x6F, 0x40, 0, 0xBE);
     Mouse_HideCursor();
@@ -387,6 +432,7 @@ void Surface_ShowBuildingInfoView(void)
     Mouse_HideCursor();
     screen_blit_rect(buf + 0xB6, 0x46E4, 0x56, 0x44, 0x5A);
     Mouse_ShowCursor();
+    draw_defence_label();
     game_free(buf);
     Surface_DrawBuildingInfo();
 }
@@ -396,12 +442,13 @@ void Surface_ShowBuildingPicture(void)
 {
     char name[32];
     uint8_t *buf = game_alloc(0x1950);
-    SDL_snprintf(name, sizeof name, "epulet\\epulet%d", ds.Surface_SelKind);
+    SDL_snprintf(name, sizeof name, "epulet\\epulet%d", picture_kind());
     Gfx_LoadPic(name, buf, 1, 0x48, 0, 0, 0x5A, false, Gfx_PalettePtr(),
                 0, 0x6F, 0x40, 0, 0xBE);
     Mouse_HideCursor();
     screen_blit_rect(buf + 0xB6, 0x46E4, 0x56, 0x44, 0x5A);
     Mouse_ShowCursor();
+    draw_defence_label();
     game_free(buf);
     Surface_DrawBuildingInfo();
 }
@@ -470,7 +517,7 @@ void Surface_DrawKindArrows(void)
     Mouse_HideCursor();
     int16_t n = ds.Surface_SelKind == 1 ? 1 : 2;
     screen_blit_rect(ds.Surface_BufA + (uint16_t)((n - 1) * 0xC + 0x15AB), 0x5000, 0xC, 0x20, 0x7B);
-    n = ds.Surface_SelKind == 0x19 ? 3 : 4;
+    n = ds.Surface_SelKind == Defence_KindCount() ? 3 : 4;
     screen_blit_rect(ds.Surface_BufA + (uint16_t)((n - 1) * 0xC + 0x15AB), 0x7940, 0xC, 0x20, 0x7B);
     Mouse_ShowCursor();
 }
@@ -940,7 +987,8 @@ void Surface_CountBuildingsByKind(int16_t system, int16_t planet, int16_t moon)
             ds.Surface_KindCounts[flag][kind - 1] = 0;
     for (int16_t i = 1; i <= ds.Game_BuildingCount; i++) {
         const TBuilding *b = bldg(i);
-        if (b->System == system && b->Planet == planet && b->Moon == moon && b->BuildLeft == 0)
+        if (b->System == system && b->Planet == planet && b->Moon == moon && b->BuildLeft == 0
+            && b->Kind <= DEFENCE_DOS_KINDS)  // the port's building is not in the DOS table
             ds.Surface_KindCounts[(int8_t)b->Powered][b->Kind - 1]++;
     }
 }

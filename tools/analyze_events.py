@@ -79,7 +79,8 @@ def site(e):
 
 
 def race_strength(r):
-    return total(r.get("units")) + total(r.get("garrison"))
+    """A race's mobile forces: what can attack (garrisons stay home)."""
+    return total(r.get("units"))
 
 
 # --- The report ------------------------------------------------------------------
@@ -119,6 +120,12 @@ def report(files, events, charts):
         out.append(f"| {b['date']} | {kind} | {b['name'] or '-'} | {site(b)} | {you} / {total(b['player_losses'])} "
                    f"| {them} / {total(b['enemy_losses'])} | {result} |")
     won = sum(1 for b in battles if b["player_won"])
+    if days:
+        out += ["", "## Races at the end", "", "| Race | Status | Bodies | Forces (travelling) | Mobile units | Garrisons |",
+                "|---|---|---|---|---|---|"]
+        for r in days[-1]["races"]:
+            out.append(f"| {r['name']} | {STATUS.get(r['status'], r['status'])} | {r['bodies']} | {r['forces']} ({r['travelling']}) "
+                       f"| {total(r['units'])} | {total(r['garrison'])} |")
     out += ["", f"Won {won} of {len(battles)} battles. Attacks without a battle: "
             f"{sum(1 for a in attacks if not a['battle'])}.", ""]
 
@@ -135,6 +142,16 @@ def report(files, events, charts):
         elif t == "force_dispatch":
             line = (f"{e['name']} force {e['force']} sets off for {site(e)}, {e['travel']} h, "
                     f"{total(e['units'][:4])} ships / {total(e['units'][4:])} ground")
+        elif t == "adaptive":
+            # Strengths are logged in tenths of a Hunter (combat weight).
+            w = dict(e)
+            for k in ("b", "c") if e["what"] in ("wait", "scale") else ("c",) if e["what"] == "warn_early" else ():
+                w[k] = round(e[k] / 10, 1)
+            what = {"wait": "wave waits for a weak player (timer %(a)s h, wave weighs %(b)s vs yours %(c)s Hunters)",
+                    "scale": "wave scaled to %(a)s%% (was %(b)s Hunters, yours %(c)s)",
+                    "warn_early": "early warning (%(a)s h before, scale %(b)s%%, yours %(c)s Hunters)",
+                    "contract": "contract signed for %(a)s credits"}.get(e["what"], e["what"])
+            line = f"adaptive: **{e['name']}** wave {e['wave']}: " + what % w
         elif t == "research_done":
             line = f"invention {e['invention']} done: {e['name']}"
         elif t in ("session", "time_jump"):
@@ -186,8 +203,8 @@ def charts(events, out_dir, plt):
     if rest:
         ax.plot(x, [sum(race_strength(q) for q in d["races"] if q["race"] in rest) for d in days],
                 color=OTHER, lw=2, ls="--", label="Other races")
-    style(ax, "Units: you and the races (forces + garrisons)", "units")
-    ax.legend(frameon=False, ncol=4, loc="upper left", labelcolor=INK)
+    style(ax, "Units: yours and the races' mobile forces (garrisons left out)", "units")
+    ax.legend(frameon=False, ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.15), labelcolor=INK)
     fig.tight_layout()
     fig.savefig(out_dir / "strength.png", dpi=120)
     plt.close(fig)

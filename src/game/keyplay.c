@@ -250,9 +250,9 @@ static void screen_targets(bool skip[67])
             grid_for(skip, 2, 0xE, 0x39, 1, 13, 0x62, 9);
         break;
     case 12: {  // the save slots
-        int16_t y, rows;
-        SaveLoad_SlotArea(&y, &rows);
-        grid_for(skip, 5, 0x0B, y, 1, rows, 0x82, 9);
+        int16_t y, rows, pitch;
+        SaveLoad_SlotArea(&y, &rows, &pitch);
+        grid_for(skip, 5, 0x0B, y, 1, rows, 0x82, pitch);
         break;
     }
     case 16:  // icons past the groups shown

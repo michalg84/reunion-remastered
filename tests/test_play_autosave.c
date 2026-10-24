@@ -35,7 +35,7 @@ enum : int {
     DATE = HEADER + 0x38A8,  // Game_Year, _Month, _Day, _Hour
 };
 
-static char path[256];
+static char path[2][256];  // the two autosaves'
 
 static struct {
     bool saved, saved_status, refused, refused_status, listed, save_refused;
@@ -45,9 +45,22 @@ static struct {
     bool loaded, talk_again;
 } seen;
 
+// Which autosave was written last (0, 1), -1: none.
+static int newest(void)
+{
+    SDL_PathInfo a, b;
+    bool has_a = SDL_GetPathInfo(path[0], &a), has_b = SDL_GetPathInfo(path[1], &b);
+    if (has_a && has_b)
+        return b.modify_time > a.modify_time;
+    return has_a ? 0 : has_b ? 1 : -1;
+}
+
+// The autosave written last.
 static uint8_t *read_autosave(size_t *size)
 {
-    return SDL_LoadFile(path, size);
+    int n = newest();
+    *size = 0;
+    return n < 0 ? nullptr : SDL_LoadFile(path[n], size);
 }
 
 static void key(SDL_Keycode k)
@@ -113,10 +126,10 @@ static void open_disk(void)
         play_fail("no disk screen");
 }
 
-// The 13th row of the disk screen.
-static void click_autosave_row(void)
+// The row of autosave `n` (0, 1): the 13th or 14th of the disk screen.
+static void click_autosave_row(int n)
 {
-    ui_click(0x40, AUTOSAVE_ROWS_Y + (AUTOSAVE_SLOT - 1) * 9 + 4);
+    ui_click(0x40, AUTOSAVE_ROWS_Y + (AUTOSAVE_SLOT + n - 1) * AUTOSAVE_ROW_H + 4);
 }
 
 static void first_game(void *unused)
@@ -148,7 +161,7 @@ static void first_game(void *unused)
     SDL_free(f2);
     const uint8_t *row = ds.SaveLoad_SlotTable + (AUTOSAVE_SLOT - 1) * 0x16;
     seen.listed = row[0] == 1 && memcmp(row + 2, seen.name, strlen(seen.name)) == 0;
-    click_autosave_row();
+    click_autosave_row(0);
     ui_settle();
     play_dump("disk");
     uint64_t since = play_frame();
@@ -183,10 +196,12 @@ static void second_game(void *unused)
     if (!play_wait_until(past_midnight, nullptr, 1000))
         play_fail("the clock does not run");
     play_test_setup(switch_on, nullptr);
+    // The talk's file, the one written last.
+    int n = newest();
     open_disk();
-    click_autosave_row();
+    click_autosave_row(n);
     ui_settle();
-    seen.loaded = ds.SaveLoad_SelectedSlot == AUTOSAVE_SLOT;
+    seen.loaded = n >= 0 && ds.SaveLoad_SelectedSlot == AUTOSAVE_SLOT + n;
     ui_toolbar_command(CMD_LOAD);
     seen.loaded &= ui_wait_screen(SCREEN_COMMAND, 2000) && ds.Game_Hour == seen.file_hour;
     // The hour's start: the trigger still armed.
@@ -206,7 +221,8 @@ int main(int argc, char *argv[])
     SDL_snprintf(dir, sizeof dir, "/tmp/reunion_test_play_autosave_%d",
                  (int)SDL_GetCurrentTime(nullptr) & 0xFFFF);
     SaveLoad_SetSaveDir(dir);
-    SDL_snprintf(path, sizeof path, "%s/reunion.auto", dir);
+    SDL_snprintf(path[0], sizeof path[0], "%s/reunion.auto", dir);
+    SDL_snprintf(path[1], sizeof path[1], "%s/reunion.auto2", dir);
 
     PlayResult r = play_run(12345, first_game, nullptr, nullptr);
     printf("first: %s; saved %d status %d \"%s\"; refused %d status %d; listed %d; save refused %d; "
@@ -226,7 +242,8 @@ int main(int argc, char *argv[])
     CHECK(!r.failed);
     CHECK(seen.loaded && seen.talk_again);
 
-    SDL_RemovePath(path);
+    SDL_RemovePath(path[0]);
+    SDL_RemovePath(path[1]);
     SDL_RemovePath(dir);
     printf(ok ? "ok\n" : "FAILED\n");
     return ok ? 0 : 1;

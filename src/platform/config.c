@@ -15,7 +15,13 @@ static constexpr Config DEFAULTS = {
     .colony_stats = true,
     .detoxin_rate = true,
     .language = LANGUAGE_ENGLISH,
+    .autosave_minutes = 10,
     .diagnostics = {.hang_seconds = 3, .log_level = CONFIG_LOG_OFF},
+    .adaptive = {.level = CONFIG_LEVEL_NORMAL, .band_low = 80, .band_high = 120, .scale_min = 70,
+                 .scale_max = 120, .delay_max = 40, .delay_bonus = 4, .credits_per_unit = 5000,
+                 .colony_units = 3, .warn_on_launch = true, .warn_intel = true,
+                 .contract_min = 50000, .contract_max = 80000, .raid_min = 800, .raid_max = 1200,
+                 .raid_gap = 200, .raid_chase_min = 100, .raid_chase_max = 200, .blockade_max = 360},
 };
 
 Config config = DEFAULTS;
@@ -24,9 +30,14 @@ static char *path;
 // dev.ini is in force: reunion.ini's own diagnostics, which config_save writes.
 static bool dev_active;
 static ConfigDiagnostics file_diagnostics;
+// Improvements dev.ini set for this run: their value in reunion.ini (dev_had:
+// whether the file had the key), which config_save keeps writing.
+static ConfigSwitches dev_prev;
+static bool dev_had[CONFIG_MAX_SWITCHES];
 
 static const char *const MUSIC_NAMES[] = {"setup", "none", "soundblaster", "gus"};
 static const char *const DISPLAY_NAMES[] = {"off", "on", "desktop"};
+static const char *const LEVEL_NAMES[] = {"easy", "normal", "hard"};
 static const char *const LOG_LEVEL_NAMES[] = {"off", "error", "warn", "info", "debug"};
 
 const char *config_log_level_name(ConfigLogLevel level)
@@ -45,6 +56,7 @@ void config_reset(void)
     SDL_free(path);
     path = nullptr;
     dev_active = false;
+    dev_prev.count = 0;
 }
 
 char *config_default_path(void)
@@ -230,6 +242,8 @@ static void set_value(const char *section, const char *key, const char *v)
         config.detoxin_rate = b;
     else if (IS("game", "language") && gamedata_language_from_name(v) < LANGUAGE_COUNT)
         config.language = gamedata_language_from_name(v);
+    else if (IS("game", "autosave_minutes"))
+        parse_int(v, &config.autosave_minutes, 0, 120);
     else if (IS("diagnostics", "crash_dumps") && parse_bool(v, &b))
         config.diagnostics.crash_dumps = b;
     else if (IS("diagnostics", "hang_watchdog") && parse_bool(v, &b))
@@ -241,6 +255,44 @@ static void set_value(const char *section, const char *key, const char *v)
                    (int)SDL_arraysize(LOG_LEVEL_NAMES));
     else if (IS("diagnostics", "event_log") && parse_bool(v, &b))
         config.diagnostics.event_log = b;
+    else if (IS("adaptive", "level"))
+        parse_name(v, (int *)&config.adaptive.level, LEVEL_NAMES, (int)SDL_arraysize(LEVEL_NAMES));
+    else if (IS("adaptive", "band_low"))
+        parse_int(v, &config.adaptive.band_low, 10, 1000);
+    else if (IS("adaptive", "band_high"))
+        parse_int(v, &config.adaptive.band_high, 10, 1000);
+    else if (IS("adaptive", "scale_min"))
+        parse_int(v, &config.adaptive.scale_min, 10, 300);
+    else if (IS("adaptive", "scale_max"))
+        parse_int(v, &config.adaptive.scale_max, 10, 300);
+    else if (IS("adaptive", "delay_max"))
+        parse_int(v, &config.adaptive.delay_max, 0, 200);
+    else if (IS("adaptive", "delay_bonus"))
+        parse_int(v, &config.adaptive.delay_bonus, 0, 50);
+    else if (IS("adaptive", "credits_per_unit"))
+        parse_int(v, &config.adaptive.credits_per_unit, 100, 1000000);
+    else if (IS("adaptive", "colony_units"))
+        parse_int(v, &config.adaptive.colony_units, 0, 100);
+    else if (IS("adaptive", "warn_on_launch") && parse_bool(v, &b))
+        config.adaptive.warn_on_launch = b;
+    else if (IS("adaptive", "warn_intel") && parse_bool(v, &b))
+        config.adaptive.warn_intel = b;
+    else if (IS("adaptive", "contract_min"))
+        parse_int(v, &config.adaptive.contract_min, 0, 10000000);
+    else if (IS("adaptive", "contract_max"))
+        parse_int(v, &config.adaptive.contract_max, 0, 10000000);
+    else if (IS("adaptive", "raid_min"))
+        parse_int(v, &config.adaptive.raid_min, 24, 100000);
+    else if (IS("adaptive", "raid_max"))
+        parse_int(v, &config.adaptive.raid_max, 24, 100000);
+    else if (IS("adaptive", "raid_gap"))
+        parse_int(v, &config.adaptive.raid_gap, 0, 5000);
+    else if (IS("adaptive", "raid_chase_min"))
+        parse_int(v, &config.adaptive.raid_chase_min, 0, 5000);
+    else if (IS("adaptive", "raid_chase_max"))
+        parse_int(v, &config.adaptive.raid_chase_max, 0, 5000);
+    else if (IS("adaptive", "blockade_max"))
+        parse_int(v, &config.adaptive.blockade_max, 1, 20000);
 #undef IS
 }
 
@@ -305,6 +357,20 @@ bool config_load_dev(const char *file, bool all_on)
             .event_log = true,
         };
     bool read = read_file(file, "diagnostics");
+    ConfigSwitches before = config.improvements;
+    read = read_file(file, "improvements") || read;
+    for (int i = 0; i < config.improvements.count; i++) {
+        int j = switch_index(&before, config.improvements.keys[i]);
+        if (j >= 0 && before.on[j] == config.improvements.on[i])
+            continue;
+        if (dev_prev.count == CONFIG_MAX_SWITCHES)
+            break;
+        int n = dev_prev.count++;
+        SDL_strlcpy(dev_prev.keys[n], config.improvements.keys[i], CONFIG_KEY_SIZE);
+        dev_prev.on[n] = j >= 0 && before.on[j];
+        dev_had[n] = j >= 0;
+        dev_active = true;
+    }
     if (read || all_on) {
         file_diagnostics = own;
         dev_active = true;
@@ -355,12 +421,33 @@ bool config_save(void)
                            "colony_stats = %s\n"
                            "detoxin_rate = %s\n"
                            "language = %s ; english | german | french | italian (the CD's)\n"
+                           "autosave_minutes = %d ; the Autosave improvement saves this often, 0: never\n"
                            "\n[diagnostics] ; reports in logs/ for bug hunting (dev.ini overrides them)\n"
                            "crash_dumps = %s\n"
                            "hang_watchdog = %s\n"
                            "hang_seconds = %d\n"
                            "log_level = %s ; off | error | warn | info | debug\n"
                            "event_log = %s\n"
+                           "\n[adaptive] ; the adaptive threat improvement (percentages of the original's)\n"
+                           "level = %s ; easy | normal | hard\n"
+                           "band_low = %d ; wave / player strength aimed for at Normal, in %%\n"
+                           "band_high = %d\n"
+                           "scale_min = %d ; a wave's strength never below this %% of the original's\n"
+                           "scale_max = %d ; ... never above (before the bonus for waiting)\n"
+                           "delay_max = %d ; a wave may wait this %% of its interval for a weak player\n"
+                           "delay_bonus = %d ; %% of strength it gains per 100 h waited\n"
+                           "credits_per_unit = %d ; credits that count as one Hunter of strength\n"
+                           "colony_units = %d ; Hunters of strength one colony counts as\n"
+                           "warn_on_launch = %s ; a message when a wave sets off\n"
+                           "warn_intel = %s ; a message 100-200 h before it, with an observatory or satellite\n"
+                           "contract_min = %d ; an intelligence contract costs between these,\n"
+                           "contract_max = %d ; drawn once per race\n"
+                           "raid_min = %d ; hours between the raids (the Raids improvement),\n"
+                           "raid_max = %d ; drawn between these\n"
+                           "raid_gap = %d ; no raid this near a story wave, hours\n"
+                           "raid_chase_min = %d ; a raid chased off without a fight delays the next\n"
+                           "raid_chase_max = %d ; by this many hours\n"
+                           "blockade_max = %d ; a blockade nobody breaks is lifted after this many hours\n"
                            "\n[improvements]\n",
                            on_off(config.freeze_money), on_off(config.freeze_ore),
                            MUSIC_NAMES[config.music], on_off(config.effects), config.music_volume,
@@ -369,12 +456,28 @@ bool config_save(void)
                            config.fullscreen_height, (double)config.fullscreen_refresh,
                            on_off(config.skip_intro), on_off(config.colony_stats),
                            on_off(config.detoxin_rate),
-                           gamedata_language_name(config.language), on_off(diag->crash_dumps),
+                           gamedata_language_name(config.language), config.autosave_minutes,
+                           on_off(diag->crash_dumps),
                            on_off(diag->hang_watchdog), diag->hang_seconds,
-                           LOG_LEVEL_NAMES[diag->log_level], on_off(diag->event_log)) > 0;
-    for (int i = 0; ok && i < config.improvements.count; i++)
-        ok = SDL_IOprintf(io, "%s = %s\n", config.improvements.keys[i],
-                          on_off(config.improvements.on[i])) > 0;
+                           LOG_LEVEL_NAMES[diag->log_level], on_off(diag->event_log), LEVEL_NAMES[config.adaptive.level],
+                           config.adaptive.band_low, config.adaptive.band_high,
+                           config.adaptive.scale_min, config.adaptive.scale_max,
+                           config.adaptive.delay_max, config.adaptive.delay_bonus,
+                           config.adaptive.credits_per_unit, config.adaptive.colony_units,
+                           on_off(config.adaptive.warn_on_launch), on_off(config.adaptive.warn_intel),
+                           config.adaptive.contract_min, config.adaptive.contract_max,
+                           config.adaptive.raid_min, config.adaptive.raid_max, config.adaptive.raid_gap,
+                           config.adaptive.raid_chase_min, config.adaptive.raid_chase_max, config.adaptive.blockade_max) > 0;
+    for (int i = 0; ok && i < config.improvements.count; i++) {
+        bool on = config.improvements.on[i];
+        int j = switch_index(&dev_prev, config.improvements.keys[i]);
+        if (j >= 0) {
+            if (!dev_had[j])
+                continue;  // dev.ini added it: reunion.ini never had it
+            on = dev_prev.on[j];
+        }
+        ok = SDL_IOprintf(io, "%s = %s\n", config.improvements.keys[i], on_off(on)) > 0;
+    }
     ok = ok && SDL_IOprintf(io, "\n[fixes]\n") > 0;
     for (int i = 0; ok && i < config.fixes.count; i++)
         ok = SDL_IOprintf(io, "%s = %s\n", config.fixes.keys[i], on_off(config.fixes.on[i])) > 0;

@@ -42,6 +42,38 @@ typedef struct ConfigDiagnostics {
     bool event_log;      // logs/events-*.jsonl: battles, story, daily state (game/evlog.h)
 } ConfigDiagnostics;
 
+// [adaptive] level: how hard the adaptive threat plays (game/adaptive.h).
+typedef enum : int {
+    CONFIG_LEVEL_EASY,
+    CONFIG_LEVEL_NORMAL,
+    CONFIG_LEVEL_HARD,
+} ConfigLevel;
+
+// [adaptive]: the adaptive threat improvement's numbers (game/adaptive.h).
+// Percentages are of the original's; the level moves the band of the
+// wave-to-player ratio the aliens aim for.
+typedef struct ConfigAdaptive {
+    ConfigLevel level;
+    int band_low;          // % wave / player at Normal: a weaker wave is raised to this
+    int band_high;         // ... a stronger one lowered to this (Easy -20, Hard +20 points)
+    int scale_min;         // % of the original wave: never below
+    int scale_max;         // ... never above (before the bonus for waiting)
+    int delay_max;         // % of the wave's own interval it may wait for a weak player
+    int delay_bonus;       // % of strength a wave gains per 100 h it waited
+    int credits_per_unit;  // credits that count as one Hunter of strength
+    int colony_units;      // Hunters of strength a colony counts as
+    bool warn_on_launch;   // a message when a wave sets off (free)
+    bool warn_intel;       // a message 100-200 h before, with an observatory or satellite at its home
+    int contract_min;      // an intelligence contract costs between these, drawn per race
+    int contract_max;
+    int raid_min;          // hours between the raids (game/raid.h): drawn between these
+    int raid_max;
+    int raid_gap;          // no raid this near a story wave, hours
+    int raid_chase_min;    // a raid chased off without a fight delays the next by this
+    int raid_chase_max;
+    int blockade_max;      // a blockade nobody breaks is lifted after this many hours
+} ConfigAdaptive;
+
 enum : int {
     CONFIG_MAX_SWITCHES = 32,
     CONFIG_KEY_SIZE = 40,
@@ -83,11 +115,13 @@ typedef struct Config {
     bool colony_stats;  // planet info: the POP row opens the colony's stats
     bool detoxin_rate;  // droids screen and Derrick info: the Derricks' Detoxin rate
     Language language;  // of the CD's games imported, from the next restart (platform/import.h)
+    int autosave_minutes;  // the autosave improvement's timed save (game/autosave.h), 0: none
     // [fixes] and [improvements]: a switch not listed is on.
     ConfigSwitches fixes;
     ConfigSwitches improvements;
     ConfigBindings keys;
     ConfigDiagnostics diagnostics;
+    ConfigAdaptive adaptive;
 } Config;
 
 extern Config config;

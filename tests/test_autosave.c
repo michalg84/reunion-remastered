@@ -17,13 +17,20 @@
 #include "game/saveload.h"
 #include "game/sim.h"
 #include "game/system.h"
+#include "platform/config.h"
 #include "platform/fs.h"
 #include "platform/video.h"
 
 static bool ok = true;
 #define CHECK(c) do { if (!(c)) { printf("FAILED line %d: %s\n", __LINE__, #c); ok = false; } } while (0)
 
-static char dir[128], path[256];
+static char dir[128], path[256], path2[256];
+static uint64_t now_ms;
+
+static uint64_t fake_ticks(void)
+{
+    return now_ms;
+}
 
 static bool written(void)
 {
@@ -33,6 +40,7 @@ static bool written(void)
 static void forget(void)
 {
     SDL_RemovePath(path);
+    SDL_RemovePath(path2);
 }
 
 // One game hour as the main loop runs it, as far as the autosave goes.
@@ -74,18 +82,21 @@ static void test_switch_off(void)
     Autosave_QuickSaveKey(true);
     Autosave_Frame();
     CHECK(!written());
-    int16_t y, rows;
-    SaveLoad_SlotArea(&y, &rows);
-    CHECK(y == 0x40 && rows == 12);
+    int16_t y, rows, pitch;
+    SaveLoad_SlotArea(&y, &rows, &pitch);
+    CHECK(y == 0x40 && rows == 12 && pitch == 9);
+    now_ms += 60 * 60000;
+    Autosave_Frame();
+    CHECK(!written());
 }
 
 static void test_triggers(void)
 {
     improvements.autosave = true;
     new_game();
-    int16_t y, rows;
-    SaveLoad_SlotArea(&y, &rows);
-    CHECK(y == AUTOSAVE_ROWS_Y && rows == 13);
+    int16_t y, rows, pitch;
+    SaveLoad_SlotArea(&y, &rows, &pitch);
+    CHECK(y == AUTOSAVE_ROWS_Y && rows == 14 && pitch == AUTOSAVE_ROW_H);
 
     // Not yet written: the row is listed by its name, and doesn't load.
     CHECK(!load_autosave());
@@ -178,9 +189,90 @@ static void test_triggers(void)
     improvements.autosave = false;
     SaveLoad_ReadSlotNames();
     int16_t slot_y;
-    SaveLoad_SlotArea(&slot_y, &rows);
+    SaveLoad_SlotArea(&slot_y, &rows, &pitch);
     CHECK(rows == 12);
     improvements.autosave = true;
+}
+
+// The row of autosave `n` (0, 1) as the disk screen lists it, loaded.
+static bool load_row(int n)
+{
+    SaveLoad_ReadSlotNames();
+    ds.SaveLoad_SelectedSlot = (int16_t)(AUTOSAVE_SLOT + n);
+    if (ds.SaveLoad_SlotTable[(AUTOSAVE_SLOT + n - 1) * 0x16] == 0)
+        return false;
+    SaveLoad_LoadGame();
+    return true;
+}
+
+// Two files written in turn; the timed save every autosave_minutes of real
+// time since the last write, not in a battle, a talk or a scene, nor with
+// the clock stopped; 0 minutes never.
+static void test_timed(void)
+{
+    improvements.autosave = true;
+    config.autosave_minutes = 5;
+    forget();
+    new_game();
+    ds.Game_CurrentScreen = 1;
+    now_ms += 5 * 60000 - 1;
+    Autosave_Frame();
+    CHECK(!written());
+    now_ms += 1;
+    ds.Game_Credits = 111;
+    Autosave_Frame();
+    CHECK(written() && !SDL_GetPathInfo(path2, nullptr));
+    // The next one goes to the second file, the first stays.
+    now_ms += 5 * 60000;
+    ds.Game_Credits = 222;
+    Autosave_Frame();
+    CHECK(SDL_GetPathInfo(path2, nullptr));
+    CHECK(load_row(0) && ds.Game_Credits == 111);
+    CHECK(load_row(1) && ds.Game_Credits == 222);
+    // The load started the time again; then the older file, the first, goes.
+    now_ms += 5 * 60000;
+    ds.Game_Credits = 333;
+    Autosave_Frame();
+    CHECK(load_row(0) && ds.Game_Credits == 333);
+    CHECK(load_row(1) && ds.Game_Credits == 222);
+
+    // Not in a battle, a talk or a scene, nor with the clock stopped: it
+    // waits for the main loop.
+    forget();
+    Autosave_Reset();
+    now_ms += 10 * 60000;
+    static const int16_t busy[] = {19, 29, 32, 33, 34};
+    for (size_t i = 0; i < SDL_arraysize(busy); i++) {
+        ds.Game_CurrentScreen = busy[i];
+        Autosave_Frame();
+    }
+    ds.Game_CurrentScreen = 1;
+    ds.Game_ClockRunning = 0;
+    Autosave_Frame();
+    CHECK(!written());
+    ds.Game_ClockRunning = 1;
+    Autosave_Frame();
+    CHECK(written());
+    // A battle's write starts the time again.
+    forget();
+    now_ms += 4 * 60000;
+    hour();
+    Autosave_ScreenEntered(29);
+    forget();
+    now_ms += 4 * 60000;
+    Autosave_Frame();
+    CHECK(!written());
+    now_ms += 60000;
+    Autosave_Frame();
+    CHECK(written());
+
+    // 0 minutes: never.
+    forget();
+    config.autosave_minutes = 0;
+    now_ms += 1000 * 60000;
+    Autosave_Frame();
+    CHECK(!written());
+    config.autosave_minutes = 10;
 }
 
 int main(int argc, char *argv[])
@@ -200,9 +292,12 @@ int main(int argc, char *argv[])
     SDL_snprintf(dir, sizeof dir, "/tmp/reunion_test_autosave_%d", (int)SDL_GetCurrentTime(nullptr) & 0xFFFF);
     SaveLoad_SetSaveDir(dir);
     SDL_snprintf(path, sizeof path, "%s/reunion.auto", dir);
+    SDL_snprintf(path2, sizeof path2, "%s/reunion.auto2", dir);
+    Autosave_SetTicks(fake_ticks);
 
     test_switch_off();
     test_triggers();
+    test_timed();
 
     forget();
     SDL_RemovePath(dir);

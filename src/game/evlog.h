@@ -21,6 +21,8 @@
 //   body_owner      a body changed hands (colony founded, taken, lost)
 //   race_status     a race's status changed (met, hostile, allied, eliminated)
 //   research_done   an invention was finished
+//   adaptive        the adaptive threat acted: a wave waits, is scaled, is
+//                   announced early, or a contract is signed
 //
 // Units: the 8 of a race force (ship classes 1..4, ground units 1..4); the
 // player's as "ships" and "ground", 4 each.
@@ -45,3 +47,11 @@ void EvLog_SpaceBattleStart(void);
 void EvLog_SpaceBattleEnd(void);
 void EvLog_GroundBattleStart(void);
 void EvLog_GroundBattleEnd(void);
+// The adaptive threat (game/adaptive.h) did something: what is "wait",
+// "scale", "warn_early" or "contract"; the three numbers depend on it.
+void EvLog_Adaptive(const char *what, int wave, int16_t race, int a, int b, int c);
+// A raid, blockade or scout (game/raid.h): `kind` is "raid", "blockade" or
+// "scout"; `what` "plan", "warn", "launch", "arrive", "leave", "chased", "battle", "bombard"...;
+// the target, the fleet's Hunters and Starfighters, and two numbers that depend on it.
+void EvLog_Raid(const char *kind, const char *what, int16_t race, int system, int planet, int moon,
+                int hunters, int fighters, int a, int b);

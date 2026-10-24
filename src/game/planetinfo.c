@@ -5,10 +5,12 @@
 
 #include "game/blit.h"
 #include "game/colonystats.h"
+#include "game/defence.h"
 #include "game/gfx.h"
 #include "game/groups.h"
 #include "game/lang.h"
 #include "game/mouse.h"
+#include "game/raid.h"
 #include "game/rawtext.h"
 #include "game/scale.h"
 #include "game/system.h"
@@ -398,6 +400,11 @@ void PlanetInfo_DrawPlanetInfoText(void)
             n++;
             LINE("Colony");
         }
+        // Improvement (game/raid.h): an alien blockade stops the cargo, and so the income.
+        if (Raid_Blockaded(ds.Game_CurSystem, cur_planet(), cur_moon())) {
+            n++;
+            SDL_strlcpy(lines[n], "BLOCKADED: no cargo", LINE40);
+        }
         if (Surface_CountBuildings(0x14, ds.Game_CurSystem, cur_planet(), cur_moon(), true) > 0) {
             n++;
             SDL_strlcpy(lines[n], Lang_TextAt(0x357b0daf, "Energy Shield"), LINE40);
@@ -721,6 +728,8 @@ static TBuilding *building_at(int16_t i)
 // original indexes it all the same (the 63 bytes before the table).
 static const TBuildingType *kind_type(uint8_t kind)
 {
+    if (kind > DEFENCE_DOS_KINDS)
+        return Defence_Type(kind);  // the port's own (game/defence.h)
     return (const TBuildingType *)((const uint8_t *)&ds + offsetof(DSeg, Surface_BuildingTypes)
                                    + (kind - 1) * (int)sizeof(TBuildingType));
 }
