@@ -20,7 +20,7 @@ static constexpr Config DEFAULTS = {
                  .scale_max = 120, .delay_max = 40, .delay_bonus = 4, .credits_per_unit = 5000,
                  .colony_units = 3, .warn_on_launch = true, .warn_intel = true,
                  .contract_min = 50000, .contract_max = 80000, .raid_min = 800, .raid_max = 1200,
-                 .raid_gap = 200, .raid_chase_min = 100, .raid_chase_max = 200, .blockade_max = 720},
+                 .raid_gap = 200, .raid_chase_min = 100, .raid_chase_max = 200, .blockade_max = 360},
 };
 
 Config config = DEFAULTS;

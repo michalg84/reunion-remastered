@@ -561,11 +561,25 @@ static void blockade(void)
     {
         CHECK(f->clock == config.adaptive.blockade_max);
         f->clock = 300;
+        ds.Message_LogCount = 0;
         hours(299);
         CHECK(Raid_Blockaded(1, 3, 0));
+        CHECK(ds.Message_LogCount >= 4);  // a reminder every 3 days
         hours(2);
         CHECK(!Raid_Blockaded(1, 3, 0) && Raid_State.fleet[0].phase == RAID_PHASE_NONE);
     }
+
+    // It goes before the story's next wave sets off (48 h ahead).
+    reset(true);
+    b = colony(1, 3, 0);
+    arrive_at(RAID_BLOCKADE, 1, 3, 0, 5, 0);
+    hours(1);
+    ds.Intel_MorgrulAttack2Timer = 100;
+    hours(5);
+    CHECK(Raid_Blockaded(1, 3, 0));
+    ds.Intel_MorgrulAttack2Timer = 48;
+    hours(1);
+    CHECK(!Raid_Blockaded(1, 3, 0) && Raid_State.fleet[0].phase == RAID_PHASE_NONE);
     reset(true);
     b = colony(1, 3, 0);
     arrive_at(RAID_BLOCKADE, 1, 3, 0, 5, 0);

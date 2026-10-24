@@ -23,6 +23,8 @@ enum : int {
     SCOUT_LEAD_SPAN = 201,
     SCOUT_PERCENT = 50,     // the chance of a scout
     SCOUT_STAY = 24,        // hours it looks around
+    BLOCKADE_REMINDER = 72, // hours between the reminders of a blockade in force
+    BLOCKADE_LEAVES_BEFORE = 48, // a blockade goes this many hours before a story wave sets off
     BLOCKADE_PERCENT = 40,  // of the raids on a body with no defence
     CEILING_PERCENT = 30,   // of the nearest wave's Hunters and Starfighters
     FLOOR_PERCENT = 50,     // of the ceiling
@@ -597,6 +599,21 @@ static bool confront(int slot)
     return start_battle(slot, defence);
 }
 
+// A blockade nobody broke ends: the fleet goes home, the next mission waits a while.
+static void lift(int slot)
+{
+    RaidState *st = &Raid_State;
+    int span = config.adaptive.raid_chase_max - config.adaptive.raid_chase_min;
+    int delay = config.adaptive.raid_chase_min + System_Random((uint16_t)SDL_max(span + 1, 1));
+    if (slot == 0) {
+        st->timer = (uint16_t)SDL_clamp(delay, 1, 60000);
+        st->plan_mission = RAID_NONE;
+        st->warned = 1;
+    }
+    announce("BLOCKADE", &st->fleet[slot], "Lifted");
+    leave(slot, "lift");
+}
+
 static void scout_hour(int slot)
 {
     RaidFleet *f = &Raid_State.fleet[slot];
@@ -649,17 +666,14 @@ static void fleet_hour(int slot)
             scout_hour(slot);
         else if (defence_of(f) > 0 || !target_is_ours(f->system, f->planet, f->moon))
             confront(slot);
-        else if (f->clock > 0 && --f->clock == 0) {
-            // Nobody came for it: the blockade is lifted, the next mission waits a while.
-            RaidState *st = &Raid_State;
-            int span = config.adaptive.raid_chase_max - config.adaptive.raid_chase_min;
-            int delay = config.adaptive.raid_chase_min + System_Random((uint16_t)SDL_max(span + 1, 1));
-            if (slot == 0) {
-                st->timer = (uint16_t)SDL_clamp(delay, 1, 60000);
-                st->plan_mission = RAID_NONE;
-                st->warned = 1;
-            }
-            leave(slot, "lift");
+        else if (f->clock > 0) {
+            // Nobody came for it. It goes when its time is up or the story's next
+            // wave is about to set off; every few days the player is reminded.
+            int32_t wave = hours_to_wave();
+            if (--f->clock == 0 || (wave >= 0 && wave <= BLOCKADE_LEAVES_BEFORE))
+                lift(slot);
+            else if (f->clock % BLOCKADE_REMINDER == 0)
+                announce("BLOCKADE", f, "Still in force");
         }
         break;
     default:
