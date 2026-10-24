@@ -151,6 +151,9 @@ if(BUILD_TESTING)
         else()
             target_link_libraries(${name} PRIVATE reunion_core)
         endif()
+        if(name STREQUAL "test_scenario")
+            target_compile_definitions(${name} PRIVATE REUNION_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+        endif()
         if(name STREQUAL "test_golden")
             # One test per case (tests/test_golden.c); the playthrough's
             # proof runs only where test_play_game does.
