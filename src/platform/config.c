@@ -15,6 +15,7 @@ static constexpr Config DEFAULTS = {
     .colony_stats = true,
     .detoxin_rate = true,
     .language = LANGUAGE_ENGLISH,
+    .autosave_minutes = 10,
     .diagnostics = {.hang_seconds = 3, .log_level = CONFIG_LOG_OFF},
     .adaptive = {.level = CONFIG_LEVEL_NORMAL, .band_low = 80, .band_high = 120, .scale_min = 70,
                  .scale_max = 120, .delay_max = 40, .delay_bonus = 4, .credits_per_unit = 5000,
@@ -241,6 +242,8 @@ static void set_value(const char *section, const char *key, const char *v)
         config.detoxin_rate = b;
     else if (IS("game", "language") && gamedata_language_from_name(v) < LANGUAGE_COUNT)
         config.language = gamedata_language_from_name(v);
+    else if (IS("game", "autosave_minutes"))
+        parse_int(v, &config.autosave_minutes, 0, 120);
     else if (IS("diagnostics", "crash_dumps") && parse_bool(v, &b))
         config.diagnostics.crash_dumps = b;
     else if (IS("diagnostics", "hang_watchdog") && parse_bool(v, &b))
@@ -418,6 +421,7 @@ bool config_save(void)
                            "colony_stats = %s\n"
                            "detoxin_rate = %s\n"
                            "language = %s ; english | german | french | italian (the CD's)\n"
+                           "autosave_minutes = %d ; the Autosave improvement saves this often, 0: never\n"
                            "\n[diagnostics] ; reports in logs/ for bug hunting (dev.ini overrides them)\n"
                            "crash_dumps = %s\n"
                            "hang_watchdog = %s\n"
@@ -452,7 +456,8 @@ bool config_save(void)
                            config.fullscreen_height, (double)config.fullscreen_refresh,
                            on_off(config.skip_intro), on_off(config.colony_stats),
                            on_off(config.detoxin_rate),
-                           gamedata_language_name(config.language), on_off(diag->crash_dumps),
+                           gamedata_language_name(config.language), config.autosave_minutes,
+                           on_off(diag->crash_dumps),
                            on_off(diag->hang_watchdog), diag->hang_seconds,
                            LOG_LEVEL_NAMES[diag->log_level], on_off(diag->event_log), LEVEL_NAMES[config.adaptive.level],
                            config.adaptive.band_low, config.adaptive.band_high,

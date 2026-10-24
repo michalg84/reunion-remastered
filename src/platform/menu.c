@@ -60,6 +60,7 @@ typedef enum : int {
     R_COLONY_STATS,
     R_DETOXIN_RATE,
     R_LANGUAGE,
+    R_AUTOSAVE_MINUTES,
     R_THREAT_LEVEL,
     R_WARN_LAUNCH,
     R_WARN_INTEL,
@@ -287,6 +288,14 @@ static void build_rows(void)
         r = add(ROW_TOGGLE, R_WARN_INTEL, "Early warning",
                 "Adaptive threat: a message 100-200 h before, with an observatory or satellite at their home (a contract warns always).");
         r->on = config.adaptive.warn_intel;
+        // The autosave improvement's (game/autosave.h).
+        r = add(ROW_CHOICE, R_AUTOSAVE_MINUTES, "Autosave every",
+                "Autosave: also every few minutes of play, never in a battle or a talk.");
+        if (config.autosave_minutes > 0)
+            SDL_snprintf(r->value, sizeof r->value, "%d min", config.autosave_minutes);
+        else
+            SDL_strlcpy(r->value, "Never", sizeof r->value);
+        r->enabled = config_improvement("autosave");
         break;
     case SEC_IMPROVEMENTS:
         add(ROW_ACTION, R_IMPROVEMENTS_ON, "All on", "Changes to the original game's design.");
@@ -475,6 +484,20 @@ static void act(const Row *r, int dir)
             l = (Language)step(l, dir ? dir : 1, 0, LANGUAGE_COUNT - 1, true);
         while (!(languages() & 1u << l));
         config.language = l;
+        break;
+    }
+    case R_AUTOSAVE_MINUTES: {
+        static const int minutes[] = {0, 3, 5, 10, 15};
+        int n = (int)SDL_arraysize(minutes), d = dir ? dir : 1, i = 0;
+        while (i < n - 1 && minutes[i] < config.autosave_minutes)
+            i++;
+        // A number from reunion.ini between two: a step lands on the nearer one that way.
+        if (minutes[i] > config.autosave_minutes && d > 0)
+            i--;
+        else if (minutes[i] < config.autosave_minutes && d < 0)
+            i++;
+        i = step(i, d, 0, n - 1, true);
+        config.autosave_minutes = minutes[i];
         break;
     }
     case R_THREAT_LEVEL:

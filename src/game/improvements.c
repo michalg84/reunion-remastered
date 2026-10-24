@@ -64,4 +64,7 @@ void Improvements_Init(bool scripted)
 {
     for (int i = 0; i < Improvements_Count; i++)
         *Improvements_List[i].value = !scripted && config_improvement(Improvements_List[i].key);
+    // The timed autosave goes by real time: a replay must play the same anywhere.
+    if (scripted)
+        config.autosave_minutes = 0;
 }

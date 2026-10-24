@@ -115,6 +115,7 @@ typedef struct Config {
     bool colony_stats;  // planet info: the POP row opens the colony's stats
     bool detoxin_rate;  // droids screen and Derrick info: the Derricks' Detoxin rate
     Language language;  // of the CD's games imported, from the next restart (platform/import.h)
+    int autosave_minutes;  // the autosave improvement's timed save (game/autosave.h), 0: none
     // [fixes] and [improvements]: a switch not listed is on.
     ConfigSwitches fixes;
     ConfigSwitches improvements;

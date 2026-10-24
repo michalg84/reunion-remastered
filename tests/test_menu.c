@@ -140,7 +140,7 @@ int main(void)
     go_to(SEC_GAME);
     press(SDLK_RETURN);
     CHECK(config.skip_intro);
-    CHECK(menu_row_count() == 7 && row_is(1, "[x] Colony stats") && row_is(2, "[x] Detoxin rate"));
+    CHECK(menu_row_count() == 8 && row_is(1, "[x] Colony stats") && row_is(2, "[x] Detoxin rate"));
     press(SDLK_DOWN);
     press(SDLK_RETURN);
     CHECK(!config.colony_stats && row_is(1, "[ ] Colony stats"));
@@ -190,6 +190,28 @@ int main(void)
     CHECK(!config.adaptive.warn_on_launch && row_is(5, "[ ] Wave warning"));
     press(SDLK_RETURN);
     CHECK(config.adaptive.warn_on_launch);
+
+    // The autosave's minutes step Never, 3, 5, 10, 15 and round; a number
+    // from the file between two steps to the nearer one that way.
+    press(SDLK_DOWN);
+    press(SDLK_DOWN);
+    CHECK(row_is(7, "Autosave every <10 min>"));
+    press(SDLK_RIGHT);
+    CHECK(config.autosave_minutes == 15);
+    press(SDLK_RIGHT);
+    CHECK(config.autosave_minutes == 0 && row_is(7, "Autosave every <Never>"));
+    press(SDLK_RIGHT);
+    CHECK(config.autosave_minutes == 3);
+    press(SDLK_LEFT);
+    press(SDLK_LEFT);
+    CHECK(config.autosave_minutes == 15);
+    config.autosave_minutes = 7;
+    press(SDLK_RIGHT);
+    CHECK(config.autosave_minutes == 10);
+    config.autosave_minutes = 7;
+    press(SDLK_LEFT);
+    CHECK(config.autosave_minutes == 5);
+    config.autosave_minutes = 10;
 
     // Improvements: a row each, on; off and on again, all off and all on.
     // While Trade routes is on, two rows say that saves won't load in DOS.

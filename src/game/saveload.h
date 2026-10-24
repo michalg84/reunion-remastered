@@ -26,9 +26,10 @@
 // both and loads either, whatever the switches say; a version newer than
 // the port knows is listed but refused.
 //
-// The autosave (game/autosave.h) is save/reunion.auto, always in the port's
-// format. While the switch is on the disk screen lists it as a 13th row
-// under the 12 slots, which move up to make room; it only loads.
+// The autosaves (game/autosave.h) are save/reunion.auto and reunion.auto2,
+// always in the port's format, written in turn. While the switch is on the
+// disk screen lists them as a 13th and 14th row under the 12 slots, which
+// move up and closer to make room; they only load.
 #pragma once
 
 #include <stddef.h>
@@ -39,8 +40,10 @@
 enum : uint32_t { SAVELOAD_FILE_SIZE = 41670 };
 
 enum : int16_t {
-    AUTOSAVE_SLOT = 13,      // the disk screen's row of the autosave
-    AUTOSAVE_ROWS_Y = 0x3A,  // the first row's y with it (the original's 0x40)
+    AUTOSAVE_SLOT = 13,      // the disk screen's row of the first autosave
+    AUTOSAVE_COUNT = 2,      // rows from it
+    AUTOSAVE_ROWS_Y = 0x3C,  // the first row's y with them (the original's 0x40)
+    AUTOSAVE_ROW_H = 8,      // the rows' pitch with them (the original's 9)
 };
 
 // Port addition (test hook): directory for the player's saves, with or without
@@ -60,10 +63,12 @@ bool SaveLoad_PortFormat(void);
 // format named `name` (string[19]), in memory the caller frees with
 // SDL_free; nullptr on failure.
 void *SaveLoad_SaveToMemory(const uint8_t name[0x14], size_t *size);
-// Writes such a save as the autosave's file.
+// Writes such a save over the older of the autosaves' files (a missing one
+// first).
 bool SaveLoad_WriteAutosave(const void *data, size_t size);
-// The disk screen's slot rows: the first's y and how many (keyboard play).
-void SaveLoad_SlotArea(int16_t *y, int16_t *rows);
+// The disk screen's slot rows: the first's y, how many and their pitch
+// (keyboard play).
+void SaveLoad_SlotArea(int16_t *y, int16_t *rows, int16_t *pitch);
 
 // 1a3e:0008
 void SaveLoad_DiskScreen(void);

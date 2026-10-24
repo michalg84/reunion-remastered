@@ -35,15 +35,20 @@ static uint8_t *slot_entry(int16_t n)
 }
 
 // Port improvement (game/autosave.h): the disk screen's rows, the
-// autosave the 13th, and where the first is drawn.
+// autosaves the 13th and 14th, their pitch and where the first is drawn.
 static int16_t slot_rows(void)
 {
-    return improvements.autosave ? AUTOSAVE_SLOT : SLOT_COUNT;
+    return improvements.autosave ? SLOT_COUNT + AUTOSAVE_COUNT : SLOT_COUNT;
+}
+
+static int16_t slot_pitch(void)
+{
+    return improvements.autosave ? AUTOSAVE_ROW_H : 9;
 }
 
 static int16_t slot_y(int16_t n)
 {
-    return (int16_t)((n - 1) * 9 + (improvements.autosave ? AUTOSAVE_ROWS_Y : 0x40));
+    return (int16_t)((n - 1) * slot_pitch() + (improvements.autosave ? AUTOSAVE_ROWS_Y : 0x40));
 }
 
 // --- Files -------------------------------------------------------------------
@@ -76,15 +81,18 @@ static const char *player_dir(void)
 }
 
 // A slot's file: save\spidysav.<slot> in the DOS format, save/reunion.<slot>
-// in the port's, in the player's directory; the autosave's is
-// save/reunion.auto, in the port's only. False without a directory.
+// in the port's, in the player's directory; the autosaves' are
+// save/reunion.auto and reunion.auto2, in the port's only. False without a
+// directory.
 static bool slot_path(char *path, size_t size, int16_t slot, bool port)
 {
     const char *dir = player_dir();
-    if (!dir || (slot == AUTOSAVE_SLOT && !port))
+    if (!dir || (slot >= AUTOSAVE_SLOT && !port))
         return false;
     if (slot == AUTOSAVE_SLOT)
         SDL_snprintf(path, size, "%sreunion.auto", dir);
+    else if (slot > AUTOSAVE_SLOT)
+        SDL_snprintf(path, size, "%sreunion.auto%d", dir, slot - AUTOSAVE_SLOT + 1);
     else
         SDL_snprintf(path, size, "%s%s.%d", dir, port ? "reunion" : "spidysav", slot);
     return true;
@@ -104,7 +112,7 @@ typedef enum : uint8_t {
     SLOT_NEWER,  // the port's format, of a version this port doesn't know
 } SlotFormat;
 
-static SlotFormat slot_format[AUTOSAVE_SLOT + 1];
+static SlotFormat slot_format[AUTOSAVE_SLOT + AUTOSAVE_COUNT];
 
 // The port's format: a header, then the DOS blocks with the building table
 // cut to its count, then the routes and, from version 2, the courses.
@@ -335,8 +343,22 @@ void *SaveLoad_SaveToMemory(const uint8_t name[0x14], size_t *size)
 
 bool SaveLoad_WriteAutosave(const void *data, size_t size)
 {
-    char path[1024];
-    return slot_path(path, sizeof path, AUTOSAVE_SLOT, true) && SDL_SaveFile(path, data, size);
+    char path[1024], oldest[1024] = "";
+    SDL_Time oldest_time = 0;
+    for (int16_t slot = AUTOSAVE_SLOT; slot < AUTOSAVE_SLOT + AUTOSAVE_COUNT; slot++) {
+        SDL_PathInfo info;
+        if (!slot_path(path, sizeof path, slot, true))
+            return false;
+        if (!SDL_GetPathInfo(path, &info)) {
+            SDL_strlcpy(oldest, path, sizeof oldest);
+            break;
+        }
+        if (!*oldest || info.modify_time < oldest_time) {
+            SDL_strlcpy(oldest, path, sizeof oldest);
+            oldest_time = info.modify_time;
+        }
+    }
+    return SDL_SaveFile(oldest, data, size);
 }
 
 // 1a3e:029c
@@ -382,8 +404,9 @@ void SaveLoad_LoadInit(void)
 void SaveLoad_ReadSlotNames(void)
 {
     // Allocated afresh on every call, as in the original (0x108 bytes, 12
-    // slots; one more for the autosave's row).
-    ds.SaveLoad_SlotTable = game_alloc((size_t)AUTOSAVE_SLOT * SLOT_SIZE);
+    // slots; one more for the autosaves' rows, as the golden runs' memory
+    // has it, and the second autosave's with the switch on).
+    ds.SaveLoad_SlotTable = game_alloc((size_t)SDL_max(slot_rows(), AUTOSAVE_SLOT) * SLOT_SIZE);
     for (int16_t n = 1; n <= slot_rows(); n++) {
         uint8_t *e = slot_entry(n);
         // Port addition: a save in the port's format, else the DOS one.
@@ -404,10 +427,10 @@ void SaveLoad_ReadSlotNames(void)
             f = open_slot(n, false, false);
         e[0] = f != nullptr;
         if (!f) {
-            // The autosave's row before there is one: its name, dashed.
+            // An autosave's row before there is one: its name, dashed.
             char empty[21] = {};
             SDL_strlcpy(empty, Lang_Text("Empty---------------"), sizeof empty);
-            if (n == AUTOSAVE_SLOT) {
+            if (n >= AUTOSAVE_SLOT) {
                 size_t len = SDL_min(SDL_strlcpy(empty, Lang_Text("Autosave"), sizeof empty), 20);
                 memset(empty + len, '-', 20 - len);
             }
@@ -583,7 +606,8 @@ static void SetupDiskHotspots(void)
     Mouse_SetHotspot(2, 0x122, 0x9B, 0x10, 0x0D, Lang_Text("Music 2"), 1, 0);
     Mouse_SetHotspot(3, 0x111, 0xA9, 0x22, 0x0D, Lang_Text("Stop music"), 1, 0);
     Mouse_SetHotspot(4, 0x111, 0xB7, 0x22, 0x0D, Lang_Text("Effects on/off"), 1, 0);
-    Mouse_SetHotspot(5, 0x0B, slot_y(1), 0x82, (int16_t)(slot_rows() * 9), Lang_Text("Select slot"), 0, 0);
+    Mouse_SetHotspot(5, 0x0B, slot_y(1), 0x82, (int16_t)(slot_rows() * slot_pitch()),
+                     Lang_Text("Select slot"), 0, 0);
 }
 
 // 1a3e:0008
@@ -605,8 +629,8 @@ void SaveLoad_DiskScreen(void)
         ds.Game_CurrentScreen = 1;
         ds.GfxPath_PageFlagB = 1;
     }
-    if (ds.Game_MenuCommand == 0x30 && ds.SaveLoad_SelectedSlot == AUTOSAVE_SLOT) {
-        // Port improvement (game/autosave.h): the autosave's row only loads.
+    if (ds.Game_MenuCommand == 0x30 && ds.SaveLoad_SelectedSlot >= AUTOSAVE_SLOT) {
+        // Port improvement (game/autosave.h): the autosaves' rows only load.
         Message_ShowMessageNoLog(Lang_Text(" The autosave can only be loaded! "));
     } else if (ds.Game_MenuCommand == 0x30) {
         int16_t sel = ds.SaveLoad_SelectedSlot;
@@ -661,7 +685,7 @@ void SaveLoad_DiskScreen(void)
         DrawOptionButtons();
     }
     if (hit == 0x19) {
-        int16_t slot = (int16_t)((ds.Mouse_ClickY - slot_y(1)) / 9 + 1);
+        int16_t slot = (int16_t)((ds.Mouse_ClickY - slot_y(1)) / slot_pitch() + 1);
         if (slot < 1)
             slot = 1;
         if (slot > slot_rows())
@@ -673,10 +697,11 @@ void SaveLoad_DiskScreen(void)
     }
 }
 
-void SaveLoad_SlotArea(int16_t *y, int16_t *rows)
+void SaveLoad_SlotArea(int16_t *y, int16_t *rows, int16_t *pitch)
 {
     *y = slot_y(1);
     *rows = slot_rows();
+    *pitch = slot_pitch();
 }
 
 // 1a3e:14b5
