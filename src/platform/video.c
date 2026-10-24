@@ -220,10 +220,12 @@ static void scale2x(const uint32_t *src, uint32_t *dst, int pitch_px)
             uint32_t f = row[x < VID_WIDTH - 1 ? x + 1 : x], h = dn[x];
             uint32_t e0 = e, e1 = e, e2 = e, e3 = e;
             if (b != h && d != f) {
-                e0 = d == b ? d : e;
-                e1 = b == f ? f : e;
-                e2 = d == h ? d : e;
-                e3 = h == f ? f : e;
+                // A corner is rounded only where the shape is two pixels thick at it
+                // (e continues both ways): a one-pixel stroke, as in the text, keeps it.
+                e0 = d == b && e == f && e == h ? d : e;
+                e1 = b == f && e == d && e == h ? f : e;
+                e2 = d == h && e == f && e == b ? d : e;
+                e3 = h == f && e == d && e == b ? f : e;
             }
             d0[2 * x] = e0;
             d0[2 * x + 1] = e1;
