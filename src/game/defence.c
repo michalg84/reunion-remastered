@@ -221,18 +221,24 @@ int Defence_MakeTwinTiles(uint8_t *sheet, uint8_t *palette, const uint8_t *const
     return made;
 }
 
-uint8_t Defence_RadarColour(const uint8_t *sheet, const uint8_t *palette, int tile)
+uint8_t Defence_RadarColour(const uint8_t *sheet, const uint8_t *palette, int tile, bool light)
 {
     const uint8_t *t = sheet + tile_offset(tile);
+    int count[256] = {0};
     uint8_t best = t[0];
-    int best_sat = -1;
+    int best_score = -1;
     for (int y = 0; y < TILE_SIZE; y++) {
         for (int x = 0; x < TILE_SIZE; x++) {
             uint8_t c = t[y * SHEET_STRIDE + x];
             const uint8_t *rgb = palette + c * 3;
-            int sat = SDL_max(rgb[0], SDL_max(rgb[1], rgb[2])) - SDL_min(rgb[0], SDL_min(rgb[1], rgb[2]));
-            if (sat > best_sat) {
-                best_sat = sat;
+            int top = SDL_max(rgb[0], SDL_max(rgb[1], rgb[2]));
+            int score;
+            if (light)
+                score = top - SDL_min(rgb[0], SDL_min(rgb[1], rgb[2]));
+            else
+                score = top < 8 ? -1 : ++count[c];
+            if (score > best_score) {
+                best_score = score;
                 best = c;
             }
         }

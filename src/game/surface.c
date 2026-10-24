@@ -22,7 +22,7 @@
 #include "platform/config.h"
 
 
-static uint8_t defence_radar[8];  // the minimap's colours: Ion tiles 228..231, then the battery's 240..243
+static uint8_t radar_fill[DEFENCE_TWIN_FIRST_TILE + 4];  // per tile: the minimap's colour where the sheet's is black, else 0
 
 static int16_t cur_planet(void)
 {
@@ -156,10 +156,25 @@ void Surface_EnterSurface(void)
         size_t sizes[3] = {0xF000, (size_t)felsz * 0x140, fanim != 0 ? (size_t)fanim * 0x140 : 0};
         Defence_MakeTwinTiles(ds.Surface_BufC, Gfx_PalettePtr(), used, sizes, 3);
     }
-    // The minimap's colours of the Ion cannon's and the battery's tiles.
-    for (int t = 0; t < (twin_tiles ? 8 : 4); t++)
-        defence_radar[t] = Defence_RadarColour(ds.Surface_BufC, Gfx_PalettePtr(),
-                                               (t < 4 ? 228 : DEFENCE_TWIN_FIRST_TILE - 4) + t);
+    // The minimap's colour of a building tile the radar sheet draws black
+    // (fixes.minimap_buildings) or has no cell for (the battery's).
+    SDL_memset(radar_fill, 0, sizeof radar_fill);
+    const uint8_t *pal = Gfx_PalettePtr();
+    for (int t = 0; t < (twin_tiles ? DEFENCE_TWIN_FIRST_TILE + 4 : 240); t++) {
+        bool twin = t >= DEFENCE_TWIN_FIRST_TILE;
+        if (!twin && !fixes.minimap_buildings)
+            continue;
+        bool black = twin;
+        if (!twin) {
+            const uint8_t *cell = ds.Surface_RadarColors + (t / 0x14) * 0xA0 + (t % 0x14) * 2;
+            const uint8_t px[4] = {cell[0], cell[1], cell[0x50], cell[0x51]};
+            black = true;
+            for (int k = 0; k < 4; k++)
+                black &= pal[px[k] * 3] + pal[px[k] * 3 + 1] + pal[px[k] * 3 + 2] < 8;
+        }
+        if (black)
+            radar_fill[t] = Defence_RadarColour(ds.Surface_BufC, pal, t, twin || (t >= 228 && t < 232));
+    }
 
     // GetMem(0x1518), 0x1518 and 0x2A30. Whole segments: x or y 0 is below
     // the layer and wraps (cell).
@@ -1009,13 +1024,10 @@ static uint8_t *radar_source(int16_t x, int16_t y)
 {
     uint16_t v = (uint16_t)(*occupy_at((int16_t)(x + 1), (int16_t)(y + 1)) - 1);
     uint16_t ofs;
-    // Port improvement (game/defence.h): the Ion cannon and the Twin battery
-    // show in their light's colour, not the radar sheet's black or nothing.
-    bool twin = v >= DEFENCE_TWIN_FIRST_TILE && v < DEFENCE_TWIN_FIRST_TILE + 4;
-    if (twin || (improvements.planetary_defence && v >= 228 && v < 232)) {
+    // Port: a tile the radar sheet has no colour for, or a black one (game/fixes.h).
+    if (v < sizeof radar_fill && radar_fill[v]) {
         static uint8_t cell[0x52];
-        uint8_t c = defence_radar[twin ? v - DEFENCE_TWIN_FIRST_TILE + 4 : v - 228];
-        cell[0] = cell[1] = cell[0x50] = cell[0x51] = c;
+        cell[0] = cell[1] = cell[0x50] = cell[0x51] = radar_fill[v];
         return cell;
     }
     if (v == 0xFFFF || v == 0xFE) {

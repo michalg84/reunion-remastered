@@ -23,6 +23,7 @@ static constexpr Fixes ALL = {
     .building_limit = true,
     .spy_reports = true,
     .league_tip = true,
+    .minimap_buildings = true,
 };
 
 Fixes fixes = ALL;
@@ -72,6 +73,8 @@ const SwitchInfo Fixes_List[] = {
      "Spy reports on armies, garrisons and weapons name the race.", &fixes.spy_reports},
     {"league_tip", "League tip",
      "The bartender still sells the League tip after the League attacks.", &fixes.league_tip},
+    {"minimap_buildings", "Minimap buildings",
+     "A building the radar sheet has no colour for is not drawn black.", &fixes.minimap_buildings},
 };
 
 const int Fixes_Count = (int)SDL_arraysize(Fixes_List);
