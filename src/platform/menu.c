@@ -296,6 +296,9 @@ static void build_rows(void)
             const MenuSwitch *f = &hooks.improvements[i];
             r = add(ROW_TOGGLE, R_IMPROVEMENT + i, f->label, f->help);
             r->on = config_improvement(f->key);
+            // Raids need the adaptive threat: without it the row is greyed.
+            if (SDL_strcmp(f->key, "raids") == 0 && !config_improvement("adaptive_threat"))
+                r->enabled = false;
             port_saves |= r->on && f->port_saves;
         }
         if (port_saves && row_count + 2 <= MAX_ROWS) {
