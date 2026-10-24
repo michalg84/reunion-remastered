@@ -85,8 +85,8 @@ static void check_improvements(void)
     // On without a config, off for a scripted run; the config turns one
     // off, applied at the main loop's next frame.
     Improvements_Init(false);
-    for (int i = 0; i < Improvements_Count; i++)  // all but the ones not played yet
-        CHECK(*Improvements_List[i].value != (SDL_strcmp(Improvements_List[i].key, "raids") == 0));
+    for (int i = 0; i < Improvements_Count; i++)
+        CHECK(*Improvements_List[i].value);
     Improvements_Init(true);
     for (int i = 0; i < Improvements_Count; i++)
         CHECK(!*Improvements_List[i].value);

@@ -139,15 +139,15 @@ int main(void)
     CHECK(d->crash_dumps && !d->event_log && d->hang_seconds == 3 && d->log_level == CONFIG_LOG_WARN);
     // dev.ini's [improvements] switch them for the run too; reunion.ini keeps its own.
     write_file(path, "[improvements]\ntrade_routes = on\n");
-    write_file(dev, "[improvements]\nraids = on\ntrade_routes = off\n");
+    write_file(dev, "[improvements]\nautosave = off\ntrade_routes = off\n");
     config_reset();
     config_load(path);
-    CHECK(!config_improvement("raids") && config_improvement("trade_routes"));
-    CHECK(config_load_dev(dev, false) && config_improvement("raids") && !config_improvement("trade_routes"));
+    CHECK(config_improvement("autosave") && config_improvement("trade_routes"));  // absent: on
+    CHECK(config_load_dev(dev, false) && !config_improvement("autosave") && !config_improvement("trade_routes"));
     CHECK(config_save());
     config_reset();
     config_load(path);
-    CHECK(!config_improvement("raids") && config_improvement("trade_routes"));
+    CHECK(config_improvement("autosave") && config_improvement("trade_routes"));
     // --dev without a file: everything on; a missing file alone does nothing.
     SDL_RemovePath(dev);
     CHECK(!config_load_dev(dev, false) && !config_dev_active());

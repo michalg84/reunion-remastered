@@ -18,4 +18,4 @@ log_level = debug    ; reunion-*.log: off | error | warn | info | debug
 event_log = on       ; events-*.jsonl: battles, story, daily state (src/game/evlog.h)
 
 [improvements]
-raids = on        ; the Raids improvement (default off); for this run only
+autosave = on     ; an improvement switched for this run only

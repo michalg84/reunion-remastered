@@ -87,13 +87,6 @@ static bool switch_on(const ConfigSwitches *sw, const char *key)
     return i < 0 || sw->on[i];
 }
 
-// Improvements that are off until the config turns them on: new ones that
-// have not been played yet.
-static bool improvement_default_off(const char *key)
-{
-    return SDL_strcmp(key, "raids") == 0;
-}
-
 static void set_switch(ConfigSwitches *sw, const char *key, bool on)
 {
     int i = switch_index(sw, key);
@@ -118,8 +111,6 @@ void config_set_fix(const char *key, bool on)
 
 bool config_improvement(const char *key)
 {
-    if (switch_index(&config.improvements, key) < 0)
-        return !improvement_default_off(key);
     return switch_on(&config.improvements, key);
 }
 
