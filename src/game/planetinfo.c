@@ -1046,6 +1046,9 @@ void PlanetInfo_SetupSystemViewHotspots(void)
             }
         }
     }
+    for (int slot = 0; slot < RAID_FLEETS; slot++)
+        if (Raid_FleetAtPlanet(slot, ds.Game_CurSystem, cur_planet()))
+            ds.PlanetInfo_HasGroups = 1;
     if (ds.PlanetInfo_HasBase != 0 || ds.PlanetInfo_HasGroups != 0) {
         for (int16_t r = 2; r <= 12; r++) {
             const TRace *race = &ds.Races_Races[r - 2];
@@ -1072,6 +1075,23 @@ void PlanetInfo_SetupSystemViewHotspots(void)
                     t->Moon = rf->Moon;
                     j++;
                 }
+            }
+            // Improvement (game/raid.h): a raid, blockade or scout fleet of the race, shown
+            // with the race's icon; its Index is RAID_ENTRY + slot.
+            for (int slot = 0; slot < RAID_FLEETS; slot++) {
+                const RaidFleet *rd = Raid_Fleet(slot);
+                if (rd->race != r || !Raid_FleetAtPlanet(slot, ds.Game_CurSystem, cur_planet()) || j >= 0x13)
+                    continue;
+                char fleet[256];
+                SDL_snprintf(fleet, sizeof fleet, "%s %s", pstr_get(name, sizeof name, Lang_Slot(&ds.Names_Races[r - 1])),
+                             rd->mission == RAID_BLOCKADE ? "blockade" : rd->mission == RAID_SCOUT ? "scouts" : "raiders");
+                Mouse_SetHotspot(j, (int16_t)(((j - 1) % 2) * 0x20 + 0x101), (uint8_t)(((j - 1) / 2) * 0x10 + 0x32),
+                                 0x20, 0x10, fleet, 0, 0);
+                TViewGroup *t = group_tab(j);
+                t->Kind = r + 3;
+                t->Index = RAID_ENTRY + slot;
+                t->Moon = rd->moon;
+                j++;
             }
         }
     }
@@ -1162,6 +1182,15 @@ static int32_t sprite_origin(const TOrbit *o)
     return (int16_t)((int16_t)(o->Y - o->Half) * 0x140) + (int16_t)(o->X - o->Half);
 }
 
+// The race of the raid, blockade or scout fleet in orbit of this planet; 0 if none.
+static int16_t raid_race_at(int16_t sys, int16_t planet)
+{
+    for (int slot = 0; slot < RAID_FLEETS; slot++)
+        if (Raid_FleetAtPlanet(slot, sys, planet))
+            return (int16_t)Raid_Fleet(slot)->race;
+    return 0;
+}
+
 // 357b:270b
 void PlanetInfo_DrawOrbitingPlanet(int16_t k)
 {
@@ -1173,6 +1202,11 @@ void PlanetInfo_DrawOrbitingPlanet(int16_t k)
         uint8_t *sprite = ds.PlanetInfo_PlanetSprite;
         Scale_ScaleSprite(sprites_at((k - 1) * 0x20 + 0x180), sprite, o->Size);
         Blit_BlitTransparent(sprite, frame_at_wrapped(sprite_origin(o)), o->Size, o->Size, 0x80);
+        // Improvement (game/raid.h): an enemy fleet in orbit wears its race's flag.
+        int16_t raider = raid_race_at(sys, k);
+        if (raider != 0)
+            Blit_BlitTransparent(icons_at(0x2A81 + raider * 8),
+                                 frame_at_wrapped(sprite_origin(o) + o->Size - 4), 7, 7, 0x40);
     }
 }
 
@@ -1265,6 +1299,11 @@ void PlanetInfo_RenderSystemView(void)
             if (ds.Galaxy_SystemStatus[k - 1] >= 0)
                 Blit_BlitTransparent(icons_at(((k - 1) / 4) * 0x17C0 + ((k - 1) % 4) * 0x40),
                                      frame_at((k - 1) * 0x17C0 + 0x100), 0x40, 0x13, 0x40);
+            // Improvement (game/raid.h): a fleet on its way (blinks) or in orbit in this system.
+            int mark = Raid_SystemMark(k);
+            if (mark == 2 || (mark == 1 && ds.PlanetInfo_BlinkTimer > 7))
+                Blit_BlitTransparent(icons_at(0x2A81 + Raid_MarkRace(k) * 8),
+                                     frame_at((k - 1) * 0x17C0 + 0x100 + 0x38), 7, 7, 0x40);
         }
     }
 

@@ -86,6 +86,23 @@ bool Raid_Blockaded(int16_t system, int16_t planet, int16_t moon);
 // Any fleet is out (the record must reach the save).
 bool Raid_Any(void);
 
+// --- On the map -----------------------------------------------------------------------------
+// A fleet at its target is an entry of the planet's fleet list (the race's icon) with
+// Index RAID_ENTRY + slot; the player can attack it from there.
+
+enum : int { RAID_ENTRY = 100 };
+
+const RaidFleet *Raid_Fleet(int slot);
+// The fleet of the slot waits or stays at this planet (or a moon of it): it can be seen and fought.
+bool Raid_FleetAtPlanet(int slot, int16_t system, int16_t planet);
+// The player's fleet attacks it (battle screen follows, set up here). False if it cannot be now
+// (another battle is at hand, or it is not there).
+bool Raid_PlayerAttack(int slot);
+// Some fleet is out for a system to show on the galaxy map: 1 = on its way, 2 = at its target.
+int Raid_SystemMark(int16_t system);
+// The race of that fleet (for its flag); 0 if none.
+int16_t Raid_MarkRace(int16_t system);
+
 // The battle in hand is a raid's.
 bool Raid_BattleActive(void);
 // The fleet in that battle.

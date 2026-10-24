@@ -295,6 +295,17 @@ static void where_is(char *buf, size_t size, int s, int p, int m)
     PlanetInfo_GetBodyLongName(buf, size, (int16_t)s, (int16_t)p, (int16_t)m);
 }
 
+// Testing aid: with REUNION_FORCE_BLOCKADE set, the next planned mission is a blockade
+// (set off within 30 h, whatever the target's defence); once only.
+static int force_state = -1;
+
+static bool force_blockade(void)
+{
+    if (force_state < 0)
+        force_state = SDL_getenv("REUNION_FORCE_BLOCKADE") != nullptr;
+    return force_state > 0;
+}
+
 static bool is_early(void)
 {
     return ds.Game_StoryStage <= EARLY_STAGE;
@@ -353,8 +364,8 @@ static void warn_early(void)
     Adaptive_RaceLabel((int16_t)st->plan_race, label, sizeof label);
     where_is(where, sizeof where, st->plan_system, st->plan_planet, st->plan_moon);
     int from = SDL_max((int)st->timer - 24, 1), to = (int)st->timer + 24;
-    const char *what = st->plan_mission == RAID_BLOCKADE ? "will blockade it" : "will shell it, not stay";
-    SDL_snprintf(text, sizeof text, "     INTELLIGENCE     | %s fleet is gathering |  It %s | %s | Sets off in %d-%d h |"
+    const char *what = st->plan_mission == RAID_BLOCKADE ? "Blockade: will stay and hold it" : "Raid: shells from orbit and leaves";
+    SDL_snprintf(text, sizeof text, "     INTELLIGENCE     | %s fleet is gathering |  %s | %s | Sets off in %d-%d h |"
                  " Ships %d-%d |",
                  label, what, where, from, to, (int)(ships * 7 / 10), (int)((ships * 13 + 9) / 10));
     Message_ShowMessage(text);
@@ -425,6 +436,10 @@ static void launch_planned(void)
         int32_t defence = Adaptive_DefenceAt((int16_t)s, (int16_t)p);
         Raid_PlanFleet(defence, hunters, fighters, is_early(), units);
         int mission = st->plan_mission == RAID_SCOUT ? RAID_SCOUT : (defence == 0 ? (int)st->plan_mission : RAID_RAID);
+        if (force_blockade() && st->plan_mission == RAID_BLOCKADE) {
+            mission = RAID_BLOCKADE;
+            force_state = 0;
+        }
         if (mission == RAID_SCOUT) {
             units[0] = UNDEFENDED_MIN;  // a few Hunters look
             units[1] = 0;
@@ -695,6 +710,11 @@ void Raid_Hour(void)
         for (int i = 0; i < RAID_FLEETS; i++)
             fleet_hour(i);
 
+    if (force_blockade() && st->plan_mission == RAID_RAID && st->timer > 0) {
+        st->plan_mission = RAID_BLOCKADE;
+        st->timer = (uint16_t)SDL_min(st->timer, 30);
+        st->scout_timer = 0;
+    }
     if (st->scout_timer > 0 && --st->scout_timer == 0)
         launch_scout();
     if (st->timer == 0) {
@@ -740,6 +760,75 @@ bool Raid_Any(void)
         if (st->fleet[i].phase != RAID_PHASE_NONE)
             return true;
     return false;
+}
+
+// --- On the map ----------------------------------------------------------------------
+
+const RaidFleet *Raid_Fleet(int slot)
+{
+    return &Raid_State.fleet[SDL_clamp(slot, 0, RAID_FLEETS - 1)];
+}
+
+bool Raid_FleetAtPlanet(int slot, int16_t system, int16_t planet)
+{
+    if (!improvements.raids || slot < 0 || slot >= RAID_FLEETS || Raid_State.in_battle != 0)
+        return false;
+    const RaidFleet *f = &Raid_State.fleet[slot];
+    return (f->phase == RAID_PHASE_WAITING || f->phase == RAID_PHASE_STAYING) && f->system == system
+           && f->planet == planet;
+}
+
+int Raid_SystemMark(int16_t system)
+{
+    if (!improvements.raids)
+        return 0;
+    int mark = 0;
+    for (int i = 0; i < RAID_FLEETS; i++) {
+        const RaidFleet *f = &Raid_State.fleet[i];
+        if (f->phase == RAID_PHASE_NONE || f->system != system)
+            continue;
+        mark = SDL_max(mark, f->phase == RAID_PHASE_FLYING ? 1 : 2);
+    }
+    return mark;
+}
+
+int16_t Raid_MarkRace(int16_t system)
+{
+    if (!improvements.raids)
+        return 0;
+    for (int i = 0; i < RAID_FLEETS; i++) {
+        const RaidFleet *f = &Raid_State.fleet[i];
+        if (f->phase != RAID_PHASE_NONE && f->system == system)
+            return (int16_t)f->race;
+    }
+    return 0;
+}
+
+bool Raid_PlayerAttack(int slot)
+{
+    RaidState *st = &Raid_State;
+    if (slot < 0 || slot >= RAID_FLEETS || !improvements.raids)
+        return false;
+    RaidFleet *f = &st->fleet[slot];
+    if (st->in_battle != 0 || (f->phase != RAID_PHASE_WAITING && f->phase != RAID_PHASE_STAYING))
+        return false;
+    if (ds.Game_CurrentScreen == 0x1D || ds.Game_ScreenSwitch)
+        return false;
+    st->in_battle = (uint16_t)(slot + 1);
+    st->fled = 0;
+    st->defence = (uint16_t)SDL_min(defence_of(f), 65535);
+    ds.SpWar_BattleSystem = (int16_t)f->system;
+    ds.SpWar_BattlePlanet = (int16_t)f->planet;
+    ds.SpWar_BattleMoon = (int16_t)f->moon;
+    ds.SpWar_RaceMissionHigh = 0;
+    ds.SpWar_GroundBattle = 0;
+    ds.Sim_PlayerAttacks = 1;
+    ds.SpWar_EnemyRace = (int16_t)f->race;
+    ds.Game_CurrentScreen = 0x1D;
+    ds.Game_ScreenSwitch = 1;
+    EvLog_Raid(mission_name(f->mission), "battle", f->race, f->system, f->planet, f->moon, f->units[0], f->units[1],
+               (int)st->defence, Raid_Weight(f->units));
+    return true;
 }
 
 // --- The battle ----------------------------------------------------------------------
