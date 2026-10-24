@@ -59,11 +59,15 @@ static void seed(int16_t system, int16_t planet, int16_t moon, bool derrick)
     BodyState *s = &state[system - 1][index_of(system, planet, moon)];
     bool mined = ds.Galaxy_SystemStatus[system - 1] == 1 && b->Owner == 1 && b->Droids != 0;
     int32_t cap = (int32_t)(uint16_t)Groups_PlanetStorage(system, planet, moon) * 1000;
-    const int32_t *stores = system == 1 && planet == 5 && moon == 0 ? ds.Game_HomeStock : b->Stores;
+    // Packed records: the stocks are not aligned for an int32_t, so they are read byte-wise.
+    const uint8_t *stores = system == 1 && planet == 5 && moon == 0 ? (const uint8_t *)ds.Game_HomeStock
+                                                                     : (const uint8_t *)b->Stores;
     s->full = 0;
     for (int16_t ore = 1; ore <= 6; ore++) {
         bool produced = ore == 1 ? derrick : mined && b->Deposits[ore - 1] != 0;
-        if (produced && stores[ore - 1] >= cap)
+        int32_t stock;
+        SDL_memcpy(&stock, stores + (ore - 1) * 4, sizeof stock);
+        if (produced && stock >= cap)
             s->full |= (uint8_t)(1u << (ore - 1));
     }
     s->armed = s->full == 0;
