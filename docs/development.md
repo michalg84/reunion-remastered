@@ -62,7 +62,8 @@ golden state hashes and the playthrough are described in PLAN.md
 
 Scripted runs (autopilot, `--replay`, the tests) read no `reunion.ini` and
 play with every improvement off, so they show the original's behaviour; a
-test of an improvement switches it on.
+test of an improvement switches it on. `REUNION_IMPROVEMENTS=all` turns every improvement on in a
+scripted run (e.g. the random soak) to look for crashes in the new code.
 
 ## Headless runs
 

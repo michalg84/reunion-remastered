@@ -62,8 +62,11 @@ bool Improvements_PortSaves(void)
 
 void Improvements_Init(bool scripted)
 {
+    // Testing aid: REUNION_IMPROVEMENTS=all turns every improvement on in a scripted run.
+    const char *all = SDL_getenv("REUNION_IMPROVEMENTS");
+    bool force = scripted && all && SDL_strcmp(all, "all") == 0;
     for (int i = 0; i < Improvements_Count; i++)
-        *Improvements_List[i].value = !scripted && config_improvement(Improvements_List[i].key);
+        *Improvements_List[i].value = force || (!scripted && config_improvement(Improvements_List[i].key));
     // The timed autosave goes by real time: a replay must play the same anywhere.
     if (scripted)
         config.autosave_minutes = 0;
