@@ -37,7 +37,7 @@ static bool dev_had[CONFIG_MAX_SWITCHES];
 
 static const char *const MUSIC_NAMES[] = {"setup", "none", "soundblaster", "gus"};
 static const char *const DISPLAY_NAMES[] = {"off", "on", "desktop"};
-static const char *const FILTER_NAMES[] = {"sharp", "smooth", "scale2x", "crt"};
+static const char *const FILTER_NAMES[] = {"sharp", "scale2x", "crt"};
 static const char *const LEVEL_NAMES[] = {"easy", "normal", "hard"};
 static const char *const LOG_LEVEL_NAMES[] = {"off", "error", "warn", "info", "debug"};
 
@@ -419,7 +419,7 @@ bool config_save(void)
                            "fullscreen_width = %d ; 0: the desktop's resolution\n"
                            "fullscreen_height = %d\n"
                            "fullscreen_refresh = %g\n"
-                           "filter = %s ; sharp | smooth | scale2x | crt\n"
+                           "filter = %s ; sharp | scale2x | crt\n"
                            "\n[game]\n"
                            "skip_intro = %s\n"
                            "colony_stats = %s\n"

@@ -68,9 +68,7 @@ static bool make_texture(void)
         return false;
     }
     // Pixel-art mode keeps pixels sharp under the non-integer line stretch.
-    SDL_SetTextureScaleMode(texture, active_filter() == CONFIG_FILTER_SMOOTH
-                                         ? SDL_SCALEMODE_LINEAR
-                                         : SDL_SCALEMODE_PIXELART);
+    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_PIXELART);
     return true;
 }
 
@@ -242,15 +240,15 @@ static uint32_t dim(uint32_t c, int pct)
     return r << 16 | g << 8 | b;
 }
 
-// CRT: each pixel 3x3, the bottom row of the three dimmed to 55% (the scan
+// CRT: each pixel 3x3, the bottom row of the three dimmed to 70% (the scan
 // line's gap), the right column a little (the phosphor's).
 static void crt3x(const uint32_t *src, uint32_t *dst, int pitch_px)
 {
     for (int y = 0; y < VID_HEIGHT; y++) {
         uint32_t *d0 = dst + 3 * y * pitch_px, *d1 = d0 + pitch_px, *d2 = d1 + pitch_px;
         for (int x = 0; x < VID_WIDTH; x++) {
-            uint32_t c = src[y * VID_WIDTH + x], side = dim(c, 85);
-            uint32_t low = dim(c, 55), lowside = dim(c, 47);
+            uint32_t c = src[y * VID_WIDTH + x], side = dim(c, 92);
+            uint32_t low = dim(c, 70), lowside = dim(c, 62);
             d0[3 * x] = d1[3 * x] = c;
             d0[3 * x + 1] = d1[3 * x + 1] = c;
             d0[3 * x + 2] = d1[3 * x + 2] = side;
@@ -264,7 +262,7 @@ static void crt3x(const uint32_t *src, uint32_t *dst, int pitch_px)
 static void present_13h(const uint32_t lut[256], void *pixels, int pitch, ConfigFilter f)
 {
     static uint32_t base[VID_WIDTH * VID_HEIGHT];
-    if (f == CONFIG_FILTER_SHARP || f == CONFIG_FILTER_SMOOTH) {
+    if (f == CONFIG_FILTER_SHARP) {
         for (int y = 0; y < VID_HEIGHT; y++) {
             uint32_t *row = (uint32_t *)((uint8_t *)pixels + y * pitch);
             for (int x = 0; x < VID_WIDTH; x++)
@@ -456,11 +454,11 @@ static bool save_filtered(const char *path, ConfigFilter f)
 
 bool vid_save_image(const char *path)
 {
-    // Testing aid: REUNION_DUMP_FILTER=sharp|smooth|scale2x|crt saves a PNG as that filter draws it.
+    // Testing aid: REUNION_DUMP_FILTER=sharp|scale2x|crt saves a PNG as that filter draws it.
     const char *want = SDL_getenv("REUNION_DUMP_FILTER");
     if (want && mode == VID_MODE_13H) {
-        static const char *const names[] = {"sharp", "smooth", "scale2x", "crt"};
-        for (int i = 0; i < 4; i++)
+        static const char *const names[] = {"sharp", "scale2x", "crt"};
+        for (int i = 0; i < 3; i++)
             if (SDL_strcasecmp(want, names[i]) == 0)
                 return save_filtered(path, (ConfigFilter)i);
     }
