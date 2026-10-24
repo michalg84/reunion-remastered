@@ -10,6 +10,7 @@
 #include "game/groups.h"
 #include "game/lang.h"
 #include "game/mouse.h"
+#include "game/raid.h"
 #include "game/rawtext.h"
 #include "game/scale.h"
 #include "game/system.h"
@@ -398,6 +399,11 @@ void PlanetInfo_DrawPlanetInfoText(void)
         if (b->Colony != 0) {
             n++;
             LINE("Colony");
+        }
+        // Improvement (game/raid.h): an alien blockade stops the cargo, and so the income.
+        if (Raid_Blockaded(ds.Game_CurSystem, cur_planet(), cur_moon())) {
+            n++;
+            SDL_strlcpy(lines[n], "BLOCKADED: no cargo", LINE40);
         }
         if (Surface_CountBuildings(0x14, ds.Game_CurSystem, cur_planet(), cur_moon(), true) > 0) {
             n++;
