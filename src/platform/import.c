@@ -256,6 +256,18 @@ static Language game_language(Source *src, int game, const GameFile *files, int 
 
 // data.partial/ becomes data/; an earlier data/ goes only once the new one
 // is in place.
+// A virus scanner or indexer may hold the files just written for a moment, and
+// Windows then refuses to rename their folder; wait it out.
+static bool rename_path(const char *from, const char *to)
+{
+    for (int tries = 0; tries < 20; tries++) {
+        if (SDL_RenamePath(from, to))
+            return true;
+        SDL_Delay(100);
+    }
+    return false;
+}
+
 static bool swap_in(const char *player_dir, const char *partial, ImportReport *r)
 {
     char *data = nullptr, *old = nullptr;
@@ -265,12 +277,12 @@ static bool swap_in(const char *player_dir, const char *partial, ImportReport *r
     if (ok) {
         remove_tree(old);
         bool had = SDL_GetPathInfo(data, nullptr);
-        if (had && !SDL_RenamePath(data, old)) {
+        if (had && !rename_path(data, old)) {
             ok = fail(r, "Replacing %s: %s", data);
-        } else if (!SDL_RenamePath(partial, data)) {
+        } else if (!rename_path(partial, data)) {
             ok = fail(r, "Renaming the import to %s: %s", data);
             if (had)
-                SDL_RenamePath(old, data);
+                rename_path(old, data);
         } else {
             remove_tree(old);
         }
